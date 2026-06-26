@@ -72,7 +72,10 @@ def get_latest(platform: str) -> dict | None:
             Bucket=settings.models_bucket,
             Key=_latest_key(platform),
         )
-        return json.loads(obj["Body"].read())
+        data = json.loads(obj["Body"].read())
+        if not data.get("version"):
+            return None
+        return data
     except ClientError as e:
         if e.response["Error"]["Code"] == "NoSuchKey":
             return None
