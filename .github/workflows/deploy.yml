@@ -42,6 +42,8 @@ jobs:
     name: Deploy App
     runs-on: ubuntu-latest
     needs: terraform
+    env:
+      EC2_IP: ${{ needs.terraform.outputs.ec2_ip }}
     steps:
       - uses: actions/checkout@v4
 
@@ -50,16 +52,35 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ needs.terraform.outputs.ec2_ip }} >> ~/.ssh/known_hosts
 
       - name: Wait for EC2 SSH ready
         run: |
           for i in $(seq 1 20); do
             ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
-              ec2-user@${{ needs.terraform.outputs.ec2_ip }} "echo ok" && break
+              ec2-user@$EC2_IP "echo ok" && break
             echo "Attempt $i failed, retrying..."
             sleep 15
           done
+
+      - name: Ensure Docker + Compose installed
+        run: |
+          ssh -o StrictHostKeyChecking=no ec2-user@$EC2_IP << 'EOF'
+          if ! command -v docker &>/dev/null; then
+            sudo dnf install -y docker
+            sudo systemctl enable --now docker
+            sudo usermod -aG docker ec2-user
+          fi
+          if ! sudo docker compose version &>/dev/null 2>&1; then
+            ARCH=$(uname -m)
+            sudo mkdir -p /usr/local/lib/docker/cli-plugins
+            sudo curl -fsSL "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-${ARCH}" \
+              -o /usr/local/lib/docker/cli-plugins/docker-compose
+            sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+          fi
+          # 기존 systemd 서비스 정리
+          sudo systemctl stop fitset-api mlflow 2>/dev/null || true
+          sudo systemctl disable fitset-api mlflow 2>/dev/null || true
+          EOF
 
       - name: Rsync code to EC2
         run: |
@@ -71,19 +92,13 @@ jobs:
             --exclude='*.pyc' \
             --exclude='__pycache__' \
             -e "ssh -o StrictHostKeyChecking=no" \
-            ./ ec2-user@${{ needs.terraform.outputs.ec2_ip }}:/app/
+            ./ ec2-user@$EC2_IP:/app/
 
-      - name: Install deps & restart services
+      - name: Build & start containers
         run: |
-          ssh -o StrictHostKeyChecking=no \
-            ec2-user@${{ needs.terraform.outputs.ec2_ip }} << 'EOF'
-            mkdir -p /app/tmp
-            TMPDIR=/app/tmp pip3.11 install -q -r /app/requirements.txt
-            UVICORN=$(python3.11 -m site --user-base)/bin/uvicorn
-            MLFLOW_BIN=$(python3.11 -m site --user-base)/bin/mlflow
-            sudo sed -i "s|ExecStart=.*uvicorn|ExecStart=$UVICORN|" /etc/systemd/system/fitset-api.service
-            sudo sed -i "s|ExecStart=.*mlflow|ExecStart=$MLFLOW_BIN|" /etc/systemd/system/mlflow.service
-            sudo systemctl daemon-reload
-            sudo systemctl restart mlflow fitset-api
-            sudo systemctl is-active mlflow fitset-api
+          ssh -o StrictHostKeyChecking=no ec2-user@$EC2_IP << 'EOF'
+          cd /app
+          sudo docker compose build --no-cache
+          sudo docker compose up -d
+          sudo docker compose ps
           EOF

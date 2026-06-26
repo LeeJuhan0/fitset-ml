@@ -1,0 +1,30 @@
+services:
+  mlflow:
+    build: .
+    image: fitset-ml-server:latest
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --default-artifact-root s3://fitset-models/mlflow
+      --host 0.0.0.0
+      --port 5001
+    ports:
+      - "5001:5001"
+    volumes:
+      - /mlflow:/mlflow
+    restart: always
+
+  api:
+    build: .
+    image: fitset-ml-server:latest
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5001
+      RAW_DATA_BUCKET: fitset-dataset
+      MODELS_BUCKET: fitset-models
+      AWS_REGION: ap-northeast-2
+    depends_on:
+      - mlflow
+    restart: always
