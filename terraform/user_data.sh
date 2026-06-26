@@ -12,7 +12,7 @@ usermod -aG docker ec2-user
 # ── Docker Compose v2 플러그인 ─────────────────────────────────────────────────
 ARCH=$(uname -m)
 mkdir -p /usr/local/lib/docker/cli-plugins
-curl -fsSL "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-${ARCH}" \
+curl -fsSL "https://github.com/docker/compose/releases/download/v2.27.0/docker-compose-linux-$${ARCH}" \
   -o /usr/local/lib/docker/cli-plugins/docker-compose
 chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
