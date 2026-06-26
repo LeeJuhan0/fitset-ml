@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FitSet ML Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f0f0f; color: #e8e8e8; min-height: 100vh; }
+
+    /* ── 잠금 화면 ── */
+    #lockScreen {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh;
+    }
+    .lock-card {
+      background: #161616; border: 1px solid #222; border-radius: 14px;
+      padding: 40px 36px; width: 320px; display: flex; flex-direction: column; gap: 20px;
+    }
+    .lock-card h2 { font-size: 18px; font-weight: 700; text-align: center; letter-spacing: -.01em; }
+    .lock-card p { font-size: 12px; color: #555; text-align: center; }
+    .lock-input {
+      padding: 10px 14px; background: #111; border: 1px solid #2a2a2a;
+      border-radius: 8px; color: #e8e8e8; font-size: 14px; outline: none; width: 100%;
+      transition: border-color .12s;
+    }
+    .lock-input:focus { border-color: #2563eb; }
+    .lock-input.error { border-color: #ef4444; animation: shake .25s; }
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      25%      { transform: translateX(-6px); }
+      75%      { transform: translateX(6px); }
+    }
+    .lock-btn {
+      padding: 10px; border-radius: 8px; border: none; cursor: pointer;
+      background: #2563eb; color: #fff; font-size: 14px; font-weight: 600;
+      transition: background .12s; width: 100%;
+    }
+    .lock-btn:hover { background: #1d4ed8; }
+    .lock-error { font-size: 12px; color: #f87171; text-align: center; min-height: 16px; }
+
+    /* ── 메인 ── */
+    #appView { display: none; }
+
+    header { padding: 16px 32px; border-bottom: 1px solid #222; display: flex; align-items: center; gap: 16px; }
+    header h1 { font-size: 17px; font-weight: 600; }
+    .platform-tabs { display: flex; gap: 6px; }
+    .platform-tabs button { padding: 5px 14px; border-radius: 6px; border: 1px solid #333; background: transparent; color: #aaa; cursor: pointer; font-size: 13px; }
+    .platform-tabs button.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+    .mlflow-btn { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 7px 16px; border-radius: 7px; border: 1px solid #2a2a2a; background: #161616; color: #60a5fa; font-size: 13px; font-weight: 500; text-decoration: none; transition: border-color .12s; }
+    .mlflow-btn:hover { border-color: #60a5fa; }
+    .mlflow-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    #mainView { display: grid; grid-template-columns: 1fr 360px; gap: 24px; padding: 24px 32px; max-width: 1400px; }
+    section { background: #161616; border: 1px solid #222; border-radius: 10px; padding: 20px; }
+    section h2 { font-size: 13px; font-weight: 600; color: #777; margin-bottom: 14px; text-transform: uppercase; letter-spacing: .05em; }
+    .file-list { max-height: 500px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+    .file-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; background: #1a1a1a; border: 1px solid #2a2a2a; cursor: pointer; transition: border-color .12s; }
+    .file-item:hover { border-color: #444; }
+    .file-item.selected { border-color: #2563eb; background: #0f1d3a; }
+    .file-item input[type=checkbox] { accent-color: #2563eb; width: 14px; height: 14px; flex-shrink: 0; }
+    .badge { font-size: 11px; padding: 2px 7px; border-radius: 99px; background: #222; color: #888; white-space: nowrap; }
+    .badge.trained { background: #14532d; color: #4ade80; }
+    .file-name { font-size: 13px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .select-count { font-size: 12px; color: #60a5fa; margin-bottom: 8px; }
+    .sidebar { display: flex; flex-direction: column; gap: 14px; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group label { font-size: 11px; color: #777; text-transform: uppercase; letter-spacing: .04em; }
+    .form-group input { padding: 8px 11px; background: #111; border: 1px solid #2a2a2a; border-radius: 6px; color: #e8e8e8; font-size: 13px; outline: none; }
+    .form-group input:focus { border-color: #2563eb; }
+    .btn { padding: 9px 14px; border-radius: 7px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity .12s; }
+    .btn:disabled { opacity: .35; cursor: default; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
+    .btn-secondary { background: #1a1a1a; border: 1px solid #333; color: #ccc; }
+    .btn-secondary:hover:not(:disabled) { border-color: #555; }
+    .btn-success { background: #14532d; color: #4ade80; border: 1px solid #166534; }
+    .btn-success:hover:not(:disabled) { background: #166534; }
+    .progress-box { display: none; background: #0a0a0a; border: 1px solid #222; border-radius: 8px; padding: 14px; }
+    .progress-box.visible { display: block; }
+    .progress-label { font-size: 12px; color: #888; margin-bottom: 8px; }
+    .progress-bar-track { background: #1a1a1a; border-radius: 99px; height: 5px; }
+    .progress-bar-fill { background: #2563eb; border-radius: 99px; height: 5px; transition: width .4s; }
+    .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+    .metric-box { background: #111; border-radius: 6px; padding: 8px 10px; }
+    .metric-box .lbl { font-size: 10px; color: #555; text-transform: uppercase; }
+    .metric-box .val { font-size: 16px; font-weight: 700; color: #e8e8e8; margin-top: 1px; }
+    .run-link { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #60a5fa; text-decoration: none; margin-top: 10px; padding: 7px 10px; border-radius: 6px; border: 1px solid #1e3a5f; background: #0a1a2e; }
+    .run-link:hover { border-color: #60a5fa; }
+    .empty { color: #3a3a3a; font-size: 13px; text-align: center; padding: 20px 0; }
+  </style>
+</head>
+<body>
+
+<!-- 잠금 화면 -->
+<div id="lockScreen">
+  <div class="lock-card">
+    <h2>FitSet ML</h2>
+    <p>대시보드에 접근하려면 암호를 입력하세요</p>
+    <input class="lock-input" id="lockInput" type="password" placeholder="암호 입력"
+      onkeydown="if(event.key==='Enter')unlock()" autofocus />
+    <button class="lock-btn" onclick="unlock()">입장</button>
+    <div class="lock-error" id="lockError"></div>
+  </div>
+</div>
+
+<!-- 메인 앱 -->
+<div id="appView">
+  <header>
+    <h1>FitSet ML</h1>
+    <div class="platform-tabs">
+      <button class="active" onclick="setPlatform('ios')">iOS</button>
+      <button onclick="setPlatform('android')">Android</button>
+    </div>
+    <a class="mlflow-btn" href="http://localhost:5001" target="_blank">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      실험 비교 · MLflow
+    </a>
+  </header>
+
+  <div id="mainView">
+    <section>
+      <h2>학습 데이터</h2>
+      <p class="select-count" id="selectCount">0개 선택됨</p>
+      <div class="file-list" id="fileList"><p class="empty">로딩 중...</p></div>
+    </section>
+
+    <div class="sidebar">
+      <section>
+        <h2>학습 설정</h2>
+        <div class="form-group">
+          <label>Epochs</label>
+          <input type="number" id="epochs" value="200" min="1" max="1000" />
+        </div>
+        <div class="form-group" style="margin-top:10px">
+          <label>Learning Rate</label>
+          <input type="text" id="lr" value="0.001" />
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn btn-primary" id="trainBtn" onclick="startTrain()" style="flex:1">학습 시작</button>
+          <button class="btn btn-secondary" onclick="loadFiles()">↻</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>진행 상황</h2>
+        <div class="progress-box" id="progressBox">
+          <div class="progress-label" id="progressLabel"></div>
+          <div class="progress-bar-track"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div>
+          <div class="metrics-grid" id="metricsGrid"></div>
+          <a class="run-link" id="mlflowRunLink" href="#" target="_blank" style="display:none">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            MLflow에서 이 run 보기 →
+          </a>
+        </div>
+        <div id="noProgress" class="empty">학습 이력 없음</div>
+      </section>
+
+      <section>
+        <h2>배포된 모델</h2>
+        <div id="modelInfo"><p class="empty">로딩 중...</p></div>
+        <button class="btn btn-success" id="deployBtn" onclick="deployModel()" style="width:100%;margin-top:12px;display:none">이 버전 배포</button>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+const MLFLOW = 'http://localhost:5001';
+const PASSWORD = '열려라 참깨';
+
+function unlock() {
+  const input = document.getElementById('lockInput');
+  const errEl = document.getElementById('lockError');
+  if (input.value === PASSWORD) {
+    document.getElementById('lockScreen').style.display = 'none';
+    document.getElementById('appView').style.display = 'block';
+    loadFiles();
+    loadModelInfo();
+  } else {
+    errEl.textContent = '암호가 틀렸습니다';
+    input.classList.add('error');
+    input.value = '';
+    setTimeout(() => { input.classList.remove('error'); errEl.textContent = ''; }, 1000);
+  }
+}
+
+let platform = 'ios';
+let selectedFiles = new Set();
+let pollTimer = null;
+let currentJobId = null;
+let lastVersion = null;
+
+function setPlatform(p) {
+  platform = p;
+  document.querySelectorAll('.platform-tabs button').forEach(b =>
+    b.classList.toggle('active', b.textContent.toLowerCase() === p));
+  selectedFiles.clear();
+  clearPoll();
+  loadFiles();
+  loadModelInfo();
+}
+
+async function api(method, path, body) {
+  const res = await fetch(`/api/v1/${platform}${path}`, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+  return data;
+}
+
+async function loadFiles() {
+  const el = document.getElementById('fileList');
+  el.innerHTML = '<p class="empty">로딩 중...</p>';
+  try {
+    const { data } = await api('GET', '/data');
+    if (!data.files.length) { el.innerHTML = '<p class="empty">CSV 파일이 없습니다</p>'; return; }
+    el.innerHTML = data.files.map(f => `
+      <div class="file-item ${selectedFiles.has(f.filename) ? 'selected' : ''}" onclick="toggleFile(this,'${f.filename}')">
+        <input type="checkbox" ${selectedFiles.has(f.filename) ? 'checked' : ''} onclick="event.stopPropagation();toggleFile(this.closest('.file-item'),'${f.filename}')"/>
+        <span class="file-name">${f.filename}</span>
+        <span class="badge">${f.class}</span>
+        ${f.trainedInVersion ? `<span class="badge trained">${f.trainedInVersion}</span>` : ''}
+      </div>`).join('');
+    updateSelectCount();
+  } catch(e) { el.innerHTML = `<p class="empty" style="color:#f87171">${e.message}</p>`; }
+}
+
+function toggleFile(el, name) {
+  if (selectedFiles.has(name)) { selectedFiles.delete(name); el.classList.remove('selected'); el.querySelector('input').checked = false; }
+  else { selectedFiles.add(name); el.classList.add('selected'); el.querySelector('input').checked = true; }
+  updateSelectCount();
+}
+function updateSelectCount() {
+  document.getElementById('selectCount').textContent = `${selectedFiles.size}개 선택됨`;
+}
+
+async function startTrain() {
+  if (!selectedFiles.size) { alert('파일을 1개 이상 선택하세요'); return; }
+  const btn = document.getElementById('trainBtn');
+  btn.disabled = true;
+  try {
+    const { data } = await api('POST', '/train', {
+      files: [...selectedFiles],
+      epochs: parseInt(document.getElementById('epochs').value),
+      lr: parseFloat(document.getElementById('lr').value),
+    });
+    currentJobId = data.jobId;
+    lastVersion = data.version;
+    showProgress(data.version, data.totalEpochs);
+    pollStatus();
+  } catch(e) { alert(e.message); btn.disabled = false; }
+}
+
+function showProgress(version, total) {
+  document.getElementById('progressBox').classList.add('visible');
+  document.getElementById('noProgress').style.display = 'none';
+  document.getElementById('progressLabel').innerHTML = `<b>${version}</b> 학습 중...`;
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('metricsGrid').innerHTML = '';
+  document.getElementById('mlflowRunLink').style.display = 'none';
+}
+
+function pollStatus() {
+  clearPoll();
+  pollTimer = setInterval(async () => {
+    try {
+      const { data } = await api('GET', `/train/status?jobId=${currentJobId}`);
+      const { status, epoch, totalEpochs, trainLoss, valLoss, valAccuracy } = data;
+      const pct = totalEpochs ? Math.round((epoch / totalEpochs) * 100) : 0;
+      document.getElementById('progressFill').style.width = pct + '%';
+      document.getElementById('progressLabel').innerHTML =
+        `<b>${lastVersion}</b> ${status === 'running' ? `epoch ${epoch}/${totalEpochs}` : status}`;
+      document.getElementById('metricsGrid').innerHTML = [
+        ['Train Loss', trainLoss?.toFixed(4) ?? '-'],
+        ['Val Loss',   valLoss?.toFixed(4)   ?? '-'],
+        ['Val Acc',    valAccuracy ? (valAccuracy * 100).toFixed(1) + '%' : '-'],
+        ['진행',        pct + '%'],
+      ].map(([l,v]) => `<div class="metric-box"><div class="lbl">${l}</div><div class="val">${v}</div></div>`).join('');
+
+      const link = document.getElementById('mlflowRunLink');
+      link.href = `${MLFLOW}/#/runs/${currentJobId}`;
+      link.style.display = 'flex';
+
+      if (status === 'completed' || status === 'failed') {
+        clearPoll();
+        document.getElementById('trainBtn').disabled = false;
+        if (status === 'completed') {
+          document.getElementById('deployBtn').dataset.version = lastVersion;
+          document.getElementById('deployBtn').style.removeProperty('display');
+          loadFiles();
+        }
+      }
+    } catch(e) { console.error(e); }
+  }, 3000);
+}
+function clearPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+async function deployModel() {
+  const version = document.getElementById('deployBtn').dataset.version;
+  if (!confirm(`${version} 배포하시겠습니까?`)) return;
+  try { await api('POST', '/deploy', { version }); alert('배포 완료!'); loadModelInfo(); }
+  catch(e) { alert(e.message); }
+}
+
+async function loadModelInfo() {
+  const el = document.getElementById('modelInfo');
+  try {
+    const { data } = await api('GET', '/model/latest');
+    el.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;font-size:13px">
+          <span style="color:#666">버전</span><span style="font-weight:600">${data.latestVersion}</span>
+        </div>
+        <div style="font-size:11px;color:#444;word-break:break-all">${data.modelUrl}</div>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = `<p class="empty">${e.message.includes('404') ? '배포된 모델 없음' : e.message}</p>`;
+  }
+}
+</script>
+</body>
+</html>

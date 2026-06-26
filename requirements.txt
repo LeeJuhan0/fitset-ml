@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+boto3
+mlflow
+torch
+numpy
+pandas
+scikit-learn
+pydantic-settings
+python-multipart
+
+# iOS 모델 변환 (macOS / Linux x86)
+# coremltools
+
+# Android 모델 변환
+# ai-edge-torch
