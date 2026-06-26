@@ -175,10 +175,16 @@ resource "aws_instance" "ml_server" {
     repo_url = var.repo_url
   })
 
+  root_block_device {
+    volume_type           = "gp3"
+    volume_size           = 30
+    delete_on_termination = true
+  }
+
   tags = { Name = "fitset-ml-server" }
 
   lifecycle {
-    ignore_changes = [ami, user_data]
+    ignore_changes = [ami, user_data, root_block_device]
   }
 }
 

@@ -45,16 +45,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: SSH Deploy
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ needs.terraform.outputs.ec2_ip }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd /app
-            git fetch origin main
-            git reset --hard origin/main
-            pip3.11 install -q -r requirements.txt
-            sudo systemctl restart fitset-api
-            sudo systemctl restart mlflow
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ needs.terraform.outputs.ec2_ip }} >> ~/.ssh/known_hosts
+
+      - name: Wait for EC2 SSH ready
+        run: |
+          for i in $(seq 1 20); do
+            ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
+              ec2-user@${{ needs.terraform.outputs.ec2_ip }} "echo ok" && break
+            echo "Attempt $i failed, retrying..."
+            sleep 15
+          done
+
+      - name: Rsync code to EC2
+        run: |
+          rsync -az --delete \
+            --exclude='.git' \
+            --exclude='.venv' \
+            --exclude='terraform' \
+            --exclude='mlruns' \
+            --exclude='*.pyc' \
+            --exclude='__pycache__' \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            ./ ec2-user@${{ needs.terraform.outputs.ec2_ip }}:/app/
+
+      - name: Install deps & restart services
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+            ec2-user@${{ needs.terraform.outputs.ec2_ip }} << 'EOF'
+            mkdir -p /app/tmp
+            TMPDIR=/app/tmp pip3.11 install -q -r /app/requirements.txt
+            UVICORN=$(python3.11 -m site --user-base)/bin/uvicorn
+            MLFLOW_BIN=$(python3.11 -m site --user-base)/bin/mlflow
+            sudo sed -i "s|ExecStart=.*uvicorn|ExecStart=$UVICORN|" /etc/systemd/system/fitset-api.service
+            sudo sed -i "s|ExecStart=.*mlflow|ExecStart=$MLFLOW_BIN|" /etc/systemd/system/mlflow.service
+            sudo systemctl daemon-reload
+            sudo systemctl restart mlflow fitset-api
+            sudo systemctl is-active mlflow fitset-api
+          EOF
