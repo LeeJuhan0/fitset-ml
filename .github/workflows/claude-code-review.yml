@@ -21,7 +21,6 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          show_full_output: true
           prompt: |
             이 PR을 한국어로 리뷰해 주세요. FastAPI 기반 ML 추론 서버(fitset-ml-server)입니다.
             먼저 `gh pr diff ${{ github.event.pull_request.number }}` 로 변경분을 확인하고,
