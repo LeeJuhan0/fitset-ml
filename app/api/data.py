@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from app.api.deps import validate_platform
 from app.core.config import CLASSES
-from app.core.s3 import generate_presigned_upload_url, get_index, put_index
+from app.core.s3 import generate_presigned_upload_url, get_index, update_index
 
 router = APIRouter()
 
@@ -55,16 +55,17 @@ def upload_confirm(body: UploadConfirmRequest, platform: str = Depends(validate_
     if body.class_name not in CLASSES:
         raise HTTPException(status_code=400, detail=f"지원하지 않는 종목: {body.class_name}")
 
-    index = get_index(platform)
-    existing = {f["filename"] for f in index["files"]}
-    if body.filename not in existing:
-        index["files"].append({
-            "filename": body.filename,
-            "class": body.class_name,
-            "collectedAt": datetime.now(timezone.utc).isoformat(),
-            "trainedInVersion": None,
-        })
-        put_index(platform, index)
+    def _append(index: dict):
+        existing = {f["filename"] for f in index["files"]}
+        if body.filename not in existing:
+            index["files"].append({
+                "filename": body.filename,
+                "class": body.class_name,
+                "collectedAt": datetime.now(timezone.utc).isoformat(),
+                "trainedInVersion": None,
+            })
+
+    update_index(platform, _append)
 
     return {
         "success": True,

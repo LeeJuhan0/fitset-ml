@@ -2,10 +2,16 @@
 
 import json
 import re
+import time
+from typing import Callable
+
 import boto3
 from botocore.exceptions import ClientError
 
 from .config import settings
+
+# index.json 조건부 쓰기(낙관적 락) 충돌 시 재시도 횟수
+_INDEX_MAX_RETRIES = 5
 
 _s3 = None
 
@@ -33,35 +39,77 @@ def _latest_key(platform: str) -> str:
 
 # ── index.json ──────────────────────────────────────────────────────────────
 
-def get_index(platform: str) -> dict:
+def _get_index_with_etag(platform: str) -> tuple[dict, str | None]:
+    """index.json 본문과 ETag를 함께 읽는다. 없으면 (빈 인덱스, None)."""
     try:
         obj = _client().get_object(
             Bucket=settings.raw_data_bucket,
             Key=_index_key(platform),
         )
-        return json.loads(obj["Body"].read())
+        return json.loads(obj["Body"].read()), obj["ETag"]
     except ClientError as e:
         if e.response["Error"]["Code"] == "NoSuchKey":
-            return {"platform": platform, "files": []}
+            return {"platform": platform, "files": []}, None
         raise
 
 
-def put_index(platform: str, data: dict):
+def get_index(platform: str) -> dict:
+    data, _ = _get_index_with_etag(platform)
+    return data
+
+
+def put_index(platform: str, data: dict, *, etag: str):
+    """index.json을 조건부 저장한다 (update_index 전용 내부 헬퍼).
+
+    etag 있음  → IfMatch:    읽은 이후 다른 요청이 바꿨으면 412로 실패
+    etag None  → IfNoneMatch: 그사이 다른 요청이 새로 만들었으면 412로 실패
+    """
+    extra = {"IfMatch": etag} if etag is not None else {"IfNoneMatch": "*"}
+
     _client().put_object(
         Bucket=settings.raw_data_bucket,
         Key=_index_key(platform),
         Body=json.dumps(data, ensure_ascii=False, indent=2),
         ContentType="application/json",
+        **extra,
     )
 
 
+def update_index(platform: str, mutate: Callable[[dict], None]) -> dict:
+    """index.json을 원자적으로 read-modify-write 한다.
+
+    여러 요청이 동시에 같은 플랫폼 인덱스를 갱신해도 lost update가 나지 않도록,
+    ETag 기반 조건부 쓰기로 보호한다. 그사이 다른 요청이 인덱스를 바꿔 쓰기가
+    거부되면(412/409), 최신본을 다시 읽어 mutate를 재적용하고 재시도한다.
+
+    mutate(index)는 index dict를 제자리(in-place)에서 변경하는 콜백.
+    """
+    for attempt in range(_INDEX_MAX_RETRIES):
+        data, etag = _get_index_with_etag(platform)
+        mutate(data)
+        try:
+            put_index(platform, data, etag=etag)
+            return data
+        except ClientError as e:
+            code = e.response["Error"]["Code"]
+            if code in ("PreconditionFailed", "ConditionalRequestConflict"):
+                # 동시 쓰기 충돌 → 살짝 백오프 후 최신본으로 재시도
+                time.sleep(0.05 * (attempt + 1))
+                continue
+            raise
+
+    raise RuntimeError(f"index.json 동시 갱신 재시도 초과: {platform}")
+
+
 def mark_trained(platform: str, filenames: list[str], version: str):
-    index = get_index(platform)
     name_set = set(filenames)
-    for f in index["files"]:
-        if f["filename"] in name_set:
-            f["trainedInVersion"] = version
-    put_index(platform, index)
+
+    def _mark(index: dict):
+        for f in index["files"]:
+            if f["filename"] in name_set:
+                f["trainedInVersion"] = version
+
+    update_index(platform, _mark)
 
 
 # ── latest.json ─────────────────────────────────────────────────────────────

@@ -1,0 +1,4 @@
+# 테스트 전용 의존성 (운영 requirements.txt와 분리)
+pytest
+httpx          # fastapi.testclient (TestClient) 의존성
+moto[s3]       # S3 통합 테스트 — 조건부 쓰기(IfMatch/IfNoneMatch) 의미를 실제 S3대로 재현

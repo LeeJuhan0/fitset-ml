@@ -7,3 +7,5 @@ mlruns/
 terraform/.terraform/
 terraform/terraform.tfstate
 terraform/terraform.tfstate.backup
+.pytest_cache/
+.DS_Store
