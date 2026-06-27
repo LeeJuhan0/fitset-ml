@@ -2,7 +2,8 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    # PR 열 때 1번만 리뷰(매 push 재리뷰 안 함). 재리뷰는 @claude 멘션 또는 로컬 /code-review.
+    types: [opened]
 
 # PR에 새 push가 오면 이전 리뷰 실행을 취소(중복 제거)
 concurrency:

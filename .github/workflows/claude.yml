@@ -17,12 +17,15 @@ concurrency:
 
 jobs:
   claude:
-    # @claude 멘션이 포함된 코멘트/이슈에만 동작
+    # 봇이 만든 이벤트(리뷰 봇 코멘트 등)에는 반응하지 않음 → 봇 캐스케이드 차단.
+    # 그 위에서 @claude 멘션이 포함된 코멘트/이슈에만 동작.
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      github.event.sender.type != 'Bot' && (
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+        (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: write
