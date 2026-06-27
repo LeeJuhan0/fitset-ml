@@ -112,7 +112,7 @@
       <button class="active" onclick="setPlatform('ios')">iOS</button>
       <button onclick="setPlatform('android')">Android</button>
     </div>
-    <a class="mlflow-btn" href="http://localhost:5001" target="_blank">
+    <a class="mlflow-btn" id="mlflowHomeBtn" href="#" target="_blank">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
       실험 비교 · MLflow
     </a>
@@ -166,7 +166,9 @@
 </div>
 
 <script>
-const MLFLOW = 'http://localhost:5001';
+// 대시보드가 열린 호스트 기준으로 같은 서버의 MLflow(:5001)를 가리킨다 (IP/도메인 바뀌어도 자동).
+const MLFLOW = location.protocol + '//' + location.hostname + ':5001';
+document.getElementById('mlflowHomeBtn').href = MLFLOW;
 const PASSWORD = '열려라 참깨';
 
 function unlock() {
@@ -269,7 +271,7 @@ function pollStatus() {
   pollTimer = setInterval(async () => {
     try {
       const { data } = await api('GET', `/train/status?jobId=${currentJobId}`);
-      const { status, epoch, totalEpochs, trainLoss, valLoss, valAccuracy } = data;
+      const { status, experimentId, epoch, totalEpochs, trainLoss, valLoss, valAccuracy } = data;
       const pct = totalEpochs ? Math.round((epoch / totalEpochs) * 100) : 0;
       document.getElementById('progressFill').style.width = pct + '%';
       document.getElementById('progressLabel').innerHTML =
@@ -282,7 +284,10 @@ function pollStatus() {
       ].map(([l,v]) => `<div class="metric-box"><div class="lbl">${l}</div><div class="val">${v}</div></div>`).join('');
 
       const link = document.getElementById('mlflowRunLink');
-      link.href = `${MLFLOW}/#/runs/${currentJobId}`;
+      // MLflow 3.x run URL: /#/experiments/{experimentId}/runs/{runId}
+      link.href = experimentId
+        ? `${MLFLOW}/#/experiments/${experimentId}/runs/${currentJobId}`
+        : `${MLFLOW}/#/experiments/0/runs/${currentJobId}`;
       link.style.display = 'flex';
 
       if (status === 'completed' || status === 'failed') {

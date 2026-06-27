@@ -75,7 +75,7 @@ def start_training(body: TrainRequest, platform: str = Depends(validate_platform
         "success": True,
         "code": "202",
         "message": "학습을 시작했습니다.",
-        "data": {"jobId": run_id, "version": version, "totalEpochs": body.epochs},
+        "data": {"jobId": run_id, "experimentId": exp_id, "version": version, "totalEpochs": body.epochs},
     }
 
 
@@ -102,6 +102,7 @@ def train_status(jobId: str, platform: str = Depends(validate_platform)):
         "message": "학습 진행률을 조회했습니다.",
         "data": {
             "status": status_map.get(state, state.lower()),
+            "experimentId": run.info.experiment_id,
             "epoch": int(metrics.get("epoch", 0)),
             "totalEpochs": total,
             "trainLoss": metrics.get("train_loss"),

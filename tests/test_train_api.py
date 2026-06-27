@@ -88,7 +88,7 @@ def test_train_uses_default_epochs_and_lr(client, monkeypatch):
 
 def test_train_status_maps_running(client, monkeypatch):
     run = SimpleNamespace(
-        info=SimpleNamespace(status="RUNNING"),
+        info=SimpleNamespace(status="RUNNING", experiment_id="exp-1"),
         data=SimpleNamespace(metrics={"epoch": 12, "train_loss": 0.4, "val_loss": 0.5, "val_accuracy": 0.8}),
     )
     fake_client = MagicMock()
