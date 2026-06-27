@@ -8,6 +8,7 @@ services:
       --default-artifact-root s3://fitset-models/mlflow
       --host 0.0.0.0
       --port 5001
+      --allowed-hosts mlflow:5001,localhost:5001,127.0.0.1:5001,${EC2_ALLOWED_HOST:-54.116.160.80:5001,ec2-54-116-160-80.ap-northeast-2.compute.amazonaws.com:5001}
     ports:
       - "5001:5001"
     volumes:
