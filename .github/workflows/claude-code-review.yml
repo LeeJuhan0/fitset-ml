@@ -1,0 +1,38 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            이 PR을 한국어로 리뷰해 주세요. FastAPI 기반 ML 추론 서버(fitset-ml-server)입니다.
+            아래 관점에서 변경된 코드만 집중해서 검토하고, 발견한 항목을 `gh pr comment`로
+            인라인이 아닌 요약 코멘트로 남겨 주세요.
+
+            - 정확성 버그 및 엣지 케이스 (None/null 처리, 예외 처리, 동시성)
+            - FastAPI 라우팅·의존성·Pydantic 스키마 사용의 적절성
+            - ML 추론 경로의 성능 (불필요한 모델 재로딩, 동기 블로킹, 메모리)
+            - 보안 (시크릿/자격증명 노출, 입력 검증, 경로 조작)
+            - 단순화·중복 제거 가능 지점
+
+            사소한 스타일 지적은 생략하고, 실제로 고칠 가치가 있는 항목 위주로 간결하게.
+            문제가 없으면 "리뷰 결과 특이사항 없음"이라고 남겨 주세요.
+          claude_args: |
+            --max-turns 20
