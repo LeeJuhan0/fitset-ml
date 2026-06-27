@@ -156,15 +156,23 @@ def reserve_upload(platform: str, class_name: str, device_id: str) -> str:
     return assigned["filename"]
 
 
-def mark_uploaded(platform: str, filename: str):
-    """예약된 항목을 업로드 완료(uploaded=True)로 표시한다. 없으면 무시(멱등)."""
+def mark_uploaded(platform: str, filename: str) -> bool:
+    """예약된 항목을 업로드 완료(uploaded=True)로 표시한다.
+
+    해당 filename 항목을 찾아 표시하면 True, 없으면 False를 반환한다(멱등).
+    """
+    result = {"found": False}
+
     def _mark(index: dict):
+        result["found"] = False  # 재시도마다 리셋
         for f in index["files"]:
             if f["filename"] == filename:
                 f["uploaded"] = True
+                result["found"] = True
                 return
 
     update_index(platform, _mark)
+    return result["found"]
 
 
 # ── latest.json ─────────────────────────────────────────────────────────────

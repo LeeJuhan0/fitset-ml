@@ -54,6 +54,8 @@ def _fake_mark_uploaded(index):
         for f in index["files"]:
             if f["filename"] == filename:
                 f["uploaded"] = True
+                return True
+        return False
     return _mark
 
 
@@ -69,6 +71,16 @@ def test_upload_confirm_marks_uploaded(client, monkeypatch):
     )
     assert resp.status_code == 200
     assert index["files"][0]["uploaded"] is True
+
+
+def test_upload_confirm_404_when_not_reserved(client, monkeypatch):
+    index = {"platform": "ios", "files": []}  # 예약된 항목 없음
+    monkeypatch.setattr(data_mod, "mark_uploaded", _fake_mark_uploaded(index))
+    resp = client.post(
+        "/api/v1/ios/data/upload-confirm",
+        json={"filename": "SQUAT_ABC_9999.csv", "class_name": "SQUAT"},
+    )
+    assert resp.status_code == 404
 
 
 def test_upload_confirm_rejects_unknown_class(client):

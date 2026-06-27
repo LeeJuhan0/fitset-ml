@@ -188,6 +188,13 @@ resource "aws_instance" "ml_server" {
   }
 }
 
+# ── Elastic IP — 인스턴스 Stop/Start 해도 퍼블릭 IP 고정 ──────────────────────
+resource "aws_eip" "ml_server" {
+  domain   = "vpc"
+  instance = aws_instance.ml_server.id
+  tags     = { Name = "fitset-ml-server-eip" }
+}
+
 # ── EBS (gp3 20GB) — Stop 후에도 보존 ────────────────────────────────────────
 
 resource "aws_ebs_volume" "mlflow_data" {

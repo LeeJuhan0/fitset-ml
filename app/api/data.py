@@ -40,12 +40,9 @@ def presigned_url(
     if not _DEVICE_ID_RE.match(device_id):
         raise HTTPException(status_code=400, detail="유효하지 않은 deviceId")
 
-    try:
-        url = generate_presigned_upload_url(platform, class_name, filename)
-    except Exception:
-        # 예약만 되고 URL 발급 실패 → 예약 취소(항목 제거)는 구현 비용이 높으므로,
-        # 최소한 클라이언트에게 명확한 5xx를 전달하고 모니터링에서 고아 항목을 주기적으로 정리.
-        raise
+    # 서버가 인덱스를 보고 파일명을 정해 예약(uploaded=False)
+    filename = reserve_upload(platform, class_name, device_id)
+    url = generate_presigned_upload_url(platform, class_name, filename)
     s3_key = f"{platform}/raw/{class_name}/{filename}"
 
     return {
