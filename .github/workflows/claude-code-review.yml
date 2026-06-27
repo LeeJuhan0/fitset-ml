@@ -4,6 +4,11 @@ on:
   pull_request:
     types: [opened, synchronize]
 
+# PR에 새 push가 오면 이전 리뷰 실행을 취소(중복 제거)
+concurrency:
+  group: claude-review-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   claude-review:
     runs-on: ubuntu-latest

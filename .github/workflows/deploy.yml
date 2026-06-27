@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
 
+# 배포는 직렬화하되 진행 중 배포는 죽이지 않는다(중간 중단 방지)
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
 jobs:
   terraform:
     name: Terraform Apply
