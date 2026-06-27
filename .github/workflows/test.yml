@@ -2,16 +2,14 @@ name: Test
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
   # 단위 + moto 통합 테스트 (빠른 게이트, AWS 자격증명 불필요)
   # E2E(tests/test_s3_e2e.py, -m e2e)는 실 S3가 필요해 CI에서 제외 — 필요 시 로컬에서 수동 실행.
   unit:
-on:
-  push:
-    branches: [main]
-  pull_request:
+    name: Unit & Integration (moto)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

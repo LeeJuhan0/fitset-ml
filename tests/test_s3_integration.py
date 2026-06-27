@@ -53,6 +53,49 @@ def test_update_index_creates_then_appends(s3_backed):
     assert names == ["a.csv", "b.csv"]
 
 
+def test_reserve_upload_assigns_sequential_names(s3_backed):
+    # 같은 class+deviceId → 순번 증가, 다른 deviceId → 별도 순번
+    f1 = s3.reserve_upload("ios", "SQUAT", "DEV1")
+    f2 = s3.reserve_upload("ios", "SQUAT", "DEV1")
+    f3 = s3.reserve_upload("ios", "SQUAT", "DEV2")
+    assert f1 == "SQUAT_DEV1_0001.csv"
+    assert f2 == "SQUAT_DEV1_0002.csv"
+    assert f3 == "SQUAT_DEV2_0001.csv"
+
+    entry = next(f for f in _read(s3_backed)["files"] if f["filename"] == f1)
+    assert entry["uploaded"] is False           # 예약 상태
+    assert entry["trainedInVersion"] is None
+
+
+def test_mark_uploaded_flips_flag(s3_backed):
+    fn = s3.reserve_upload("ios", "PUSHUP", "DEV1")
+    s3.mark_uploaded("ios", fn)
+    entry = next(f for f in _read(s3_backed)["files"] if f["filename"] == fn)
+    assert entry["uploaded"] is True
+
+
+def test_reserve_upload_concurrent_no_duplicate_numbers(s3_backed):
+    """동시 예약 — 실제 S3(moto) 조건부 쓰기 위에서 번호 중복이 없어야 한다."""
+    import threading
+
+    names: list[str] = []
+    lock = threading.Lock()
+
+    def worker():
+        fn = s3.reserve_upload("ios", "REST", "DEV1")
+        with lock:
+            names.append(fn)
+
+    threads = [threading.Thread(target=worker) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(set(names)) == 4  # 4개 모두 고유
+    assert sorted(names) == [f"REST_DEV1_000{i}.csv" for i in range(1, 5)]
+
+
 def test_update_index_survives_real_concurrent_write(s3_backed):
     """update_index 가 ETag 를 읽은 뒤, put 전에 다른 요청이 인덱스를 바꾼 상황.
 

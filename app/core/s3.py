@@ -2,7 +2,9 @@
 
 import json
 import re
+import threading
 import time
+from datetime import datetime, timezone
 from typing import Callable
 
 import boto3
@@ -108,6 +110,59 @@ def mark_trained(platform: str, filenames: list[str], version: str):
         for f in index["files"]:
             if f["filename"] in name_set:
                 f["trainedInVersion"] = version
+
+    update_index(platform, _mark)
+
+
+# ── 파일명 예약(서버가 인덱스 보고 이름 부여) ────────────────────────────────
+
+# 예약을 직렬화하는 인프로세스 락 — "동기 처리"로 동시 요청에 같은 번호가 안 나가게.
+# (update_index의 ETag 조건부 쓰기가 교차 프로세스까지 보장하고, 이 락은 인프로세스 직렬화)
+_reserve_lock = threading.Lock()
+
+
+def reserve_upload(platform: str, class_name: str, device_id: str) -> str:
+    """인덱스를 보고 다음 파일명을 정해 예약(uploaded=False)하고 그 파일명을 반환한다.
+
+    파일명: ``{CLASS}_{deviceId}_{NNNN}.csv`` — 해당 class+deviceId의 다음 순번.
+    동기 처리: 인프로세스 락 + update_index(낙관적 락)로 동시 요청에도 번호가
+    중복되지 않게 직렬화한다.
+    """
+    assigned: dict = {}
+
+    def _reserve(index: dict):
+        files = index["files"]
+        existing = {f["filename"] for f in files}
+        seq = sum(
+            1 for f in files
+            if f.get("class") == class_name and f.get("deviceId") == device_id
+        ) + 1
+        filename = f"{class_name}_{device_id}_{seq:04d}.csv"
+        while filename in existing:  # 구멍/중복 방지
+            seq += 1
+            filename = f"{class_name}_{device_id}_{seq:04d}.csv"
+        files.append({
+            "filename": filename,
+            "class": class_name,
+            "deviceId": device_id,
+            "collectedAt": datetime.now(timezone.utc).isoformat(),
+            "uploaded": False,
+            "trainedInVersion": None,
+        })
+        assigned["filename"] = filename
+
+    with _reserve_lock:
+        update_index(platform, _reserve)
+    return assigned["filename"]
+
+
+def mark_uploaded(platform: str, filename: str):
+    """예약된 항목을 업로드 완료(uploaded=True)로 표시한다. 없으면 무시(멱등)."""
+    def _mark(index: dict):
+        for f in index["files"]:
+            if f["filename"] == filename:
+                f["uploaded"] = True
+                return
 
     update_index(platform, _mark)
 
