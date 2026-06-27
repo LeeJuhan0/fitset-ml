@@ -45,6 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       ec2_ip: ${{ steps.tf_output.outputs.ec2_ip }}
+      ec2_dns: ${{ steps.tf_output.outputs.ec2_dns }}
     steps:
       - uses: actions/checkout@v4
 
@@ -68,10 +69,12 @@ jobs:
         working-directory: terraform
         run: terraform apply -auto-approve
 
-      - name: Get EC2 IP
+      - name: Get EC2 IP/DNS
         id: tf_output
         working-directory: terraform
-        run: echo "ec2_ip=$(terraform output -raw ec2_public_ip)" >> $GITHUB_OUTPUT
+        run: |
+          echo "ec2_ip=$(terraform output -raw ec2_public_ip)" >> $GITHUB_OUTPUT
+          echo "ec2_dns=$(terraform output -raw ec2_public_dns)" >> $GITHUB_OUTPUT
 
   deploy:
     name: Deploy App
@@ -79,6 +82,7 @@ jobs:
     needs: [test, terraform]
     env:
       EC2_IP: ${{ needs.terraform.outputs.ec2_ip }}
+      EC2_DNS: ${{ needs.terraform.outputs.ec2_dns }}
     steps:
       - uses: actions/checkout@v4
 
@@ -128,6 +132,14 @@ jobs:
             --exclude='__pycache__' \
             -e "ssh -o StrictHostKeyChecking=no" \
             ./ ec2-user@$EC2_IP:/app/
+
+      - name: Inject MLflow allowed-hosts (현재 EIP/DNS)
+        run: |
+          # compose가 자동 로드하는 /app/.env에 현재 EIP·DNS를 주입.
+          # rsync(--delete) 이후에 생성해야 살아남는다(이 step은 rsync 다음).
+          ALLOWED="${EC2_IP}:5001,${EC2_DNS}:5001"
+          ssh -o StrictHostKeyChecking=no ec2-user@$EC2_IP \
+            "echo 'EC2_ALLOWED_HOST=${ALLOWED}' | sudo tee /app/.env >/dev/null"
 
       - name: Build & start containers
         run: |
