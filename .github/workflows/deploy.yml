@@ -133,13 +133,17 @@ jobs:
             -e "ssh -o StrictHostKeyChecking=no" \
             ./ ec2-user@$EC2_IP:/app/
 
-      - name: Inject MLflow allowed-hosts (현재 EIP/DNS)
+      - name: Inject MLflow allowed-hosts & CORS origins (현재 EIP/DNS)
         run: |
           # compose가 자동 로드하는 /app/.env에 현재 EIP·DNS를 주입.
+          # - EC2_ALLOWED_HOST: Host 헤더 검증(--allowed-hosts)
+          # - EC2_CORS_ORIGINS: CORS origin 검증(--cors-allowed-origins, http:// 스킴 포함)
+          #   POST(예: traces/metrics) 차단 → "Failed to load chart data" 방지
           # rsync(--delete) 이후에 생성해야 살아남는다(이 step은 rsync 다음).
           ALLOWED="${EC2_IP}:5001,${EC2_DNS}:5001"
+          CORS="http://${EC2_IP}:5001,http://${EC2_DNS}:5001"
           ssh -o StrictHostKeyChecking=no ec2-user@$EC2_IP \
-            "echo 'EC2_ALLOWED_HOST=${ALLOWED}' | sudo tee /app/.env >/dev/null"
+            "printf 'EC2_ALLOWED_HOST=%s\nEC2_CORS_ORIGINS=%s\n' '${ALLOWED}' '${CORS}' | sudo tee /app/.env >/dev/null"
 
       - name: Build & start containers
         run: |
