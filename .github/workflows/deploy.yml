@@ -113,7 +113,9 @@ jobs:
       - name: Build & start containers
         run: |
           ssh -o StrictHostKeyChecking=no ec2-user@$EC2_IP << 'EOF'
+          set -e   # 빌드 실패 시 즉시 중단 → deploy도 실패(거짓 성공 방지)
           cd /app
+          sudo docker system prune -af   # 옛 이미지·빌드 캐시 정리(디스크 확보)
           sudo docker compose build --no-cache
           # --force-recreate: 코드만 바뀌어도 컨테이너를 새 이미지로 반드시 재생성
           sudo docker compose up -d --force-recreate

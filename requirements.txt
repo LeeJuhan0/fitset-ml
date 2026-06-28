@@ -1,8 +1,12 @@
+# CPU 전용 torch — EC2(t3.small)·CI엔 GPU가 없어 CUDA 휠(nvidia-*, 수 GB)은
+# 낭비이자 디스크 폭발(No space left on device)의 주범. CPU 빌드로 이미지 대폭 축소.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 fastapi
 uvicorn[standard]
 boto3
 mlflow
-torch
+torch==2.12.1+cpu
 numpy
 pandas
 scikit-learn
