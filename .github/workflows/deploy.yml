@@ -1,6 +1,7 @@
 name: Deploy
 
 on:
+  workflow_dispatch:   # 수동 재배포 트리거 (현재 main 코드로 rsync + build + 재기동)
   push:
     branches: [main]
     # 앱 소스 변경 시에만 배포. 인프라(terraform/**)는 여기서 다루지 않음 — terraform.yml에서 수동 적용.
