@@ -3,14 +3,14 @@ name: Deploy
 on:
   push:
     branches: [main]
-    # 소스/인프라 변경 시에만 배포 — README·docs·.github(yaml)만 바뀌면 서버 재기동 안 함
+    # 앱 소스 변경 시에만 배포. 인프라(terraform/**)는 여기서 다루지 않음 — terraform.yml에서 수동 적용.
+    # README·docs·.github(yaml)만 바뀌면 서버 재기동 안 함.
     paths:
       - 'app/**'
       - 'requirements*.txt'
       - 'Dockerfile'
       - 'docker-compose*.yml'
       - 'pytest.ini'
-      - 'terraform/**'
 
 # 배포는 직렬화하되 진행 중 배포는 죽이지 않는다(중간 중단 방지)
 concurrency:
@@ -39,50 +39,15 @@ jobs:
       - name: Run tests (e2e 제외)
         run: pytest -m "not e2e"
 
-  terraform:
-    name: Terraform Apply
-    needs: test
-    runs-on: ubuntu-latest
-    outputs:
-      ec2_ip: ${{ steps.tf_output.outputs.ec2_ip }}
-      ec2_dns: ${{ steps.tf_output.outputs.ec2_dns }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.8"
-          terraform_wrapper: false
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-northeast-2
-
-      - name: Terraform Init
-        working-directory: terraform
-        run: terraform init
-
-      - name: Terraform Apply
-        working-directory: terraform
-        run: terraform apply -auto-approve
-
-      - name: Get EC2 IP/DNS
-        id: tf_output
-        working-directory: terraform
-        run: |
-          echo "ec2_ip=$(terraform output -raw ec2_public_ip)" >> $GITHUB_OUTPUT
-          echo "ec2_dns=$(terraform output -raw ec2_public_dns)" >> $GITHUB_OUTPUT
-
   deploy:
     name: Deploy App
     runs-on: ubuntu-latest
-    needs: [test, terraform]
+    needs: [test]
+      EC2_IP: ${{ vars.EC2_IP }}
+    # vars.EC2_IP / vars.EC2_DNS 를 레포 Variables에 넣어두면 그걸 쓰고, 없으면 현재 EIP로 폴백.
     env:
-      EC2_IP: ${{ needs.terraform.outputs.ec2_ip }}
-      EC2_DNS: ${{ needs.terraform.outputs.ec2_dns }}
+      EC2_IP: ${{ vars.EC2_IP || '54.116.160.80' }}
+      EC2_DNS: ${{ vars.EC2_DNS || 'ec2-54-116-160-80.ap-northeast-2.compute.amazonaws.com' }}
     steps:
       - uses: actions/checkout@v4
 
