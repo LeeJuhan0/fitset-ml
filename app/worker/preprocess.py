@@ -21,11 +21,17 @@ def sliding_window(
     classes: list[str],
     window: int = WINDOW,
     stride: int = STRIDE,
+    offset: int = 0,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """슬라이딩 윈도우 세그먼테이션 → (windows [M, W, 6], label_ids [M])"""
+    """슬라이딩 윈도우 세그먼테이션 → (windows [M, W, 6], label_ids [M])
+
+    offset: 시작점을 [0, stride) 만큼 밀어 윈도우의 위상(phase)을 바꾼다.
+            학습 시 에폭마다 랜덤 오프셋을 주면 임의 시작점(추론)에 강건해진다(증강).
+            기본 0 → 기존 동작과 동일(추론·평가는 0 고정).
+    """
     xs, ys = [], []
     n = len(signals)
-    for start in range(0, n - window + 1, stride):
+    for start in range(offset, n - window + 1, stride):
         seg = signals[start : start + window]
         seg_labels = labels[start : start + window]
         # 윈도우 내 다수결 라벨 (모두 같은 라벨이면 그대로)

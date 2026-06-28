@@ -12,6 +12,7 @@
 import argparse
 import json
 import os
+import random
 import tempfile
 from pathlib import Path
 
@@ -19,13 +20,13 @@ import mlflow
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GroupShuffleSplit, train_test_split
 from torch.utils.data import DataLoader, TensorDataset
 
 from app.core.config import CLASSES, settings
 from app.core.s3 import download_csv, get_index, mark_trained, upload_model_artifact
 from app.worker.model_def import FitSetModel
-from app.worker.preprocess import compute_stats, load_csv, normalize, sliding_window
+from app.worker.preprocess import STRIDE, compute_stats, load_csv, normalize, sliding_window
 
 
 def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, version: str):
@@ -56,43 +57,89 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
             "arch_fc_hidden": 128,
         })
 
-        # ── 1. CSV 다운로드 & 전처리 ────────────────────────────────────
+        # ── 1. CSV 다운로드 (파일별 원신호 보관) ───────────────────────
         index = get_index(platform)
         file_map = {f["filename"]: f["class"] for f in index["files"]}
 
-        all_windows, all_labels = [], []
+        per_file: dict[str, tuple] = {}   # filename -> (signals[N,6], labels[N])
         with tempfile.TemporaryDirectory() as tmp:
             for filename in files:
                 class_name = file_map[filename]
                 local = os.path.join(tmp, filename)
                 download_csv(platform, class_name, filename, local)
-                signals, labels = load_csv(local)
-                w, y = sliding_window(signals, labels, CLASSES)
-                all_windows.append(w)
-                all_labels.append(y)
+                per_file[filename] = load_csv(local)
 
-        X = np.concatenate(all_windows)
-        y = np.concatenate(all_labels)
+        def window_files(file_list, offset=0):
+            """주어진 파일들을 윈도우로 잘라 (X[M,200,6], y[M], groups[M]) 반환.
+            groups = 각 윈도우의 출신 filename — 파일 단위 분할·누수 차단용."""
+            xs, ys, gs = [], [], []
+            for fn in file_list:
+                signals, labels = per_file[fn]
+                w, yy = sliding_window(signals, labels, CLASSES, offset=offset)
+                if len(w):
+                    xs.append(w)
+                    ys.append(yy)
+                    gs.append(np.array([fn] * len(w)))
+            if not xs:
+                return (np.empty((0, 200, 6), np.float32),
+                        np.empty((0,), np.int64),
+                        np.empty((0,), object))
+            return np.concatenate(xs), np.concatenate(ys), np.concatenate(gs)
 
-        mean, std = compute_stats(X)
-        X_norm = normalize(X, mean, std)
+        # 기준 윈도우(offset=0) — 분할·통계·평가셋의 기준
+        X0, y0, groups = window_files(files, offset=0)
 
-        # train 70 / val 15 / test 15
+        # ── 2. 분할 — 파일(recording) 단위 GroupShuffleSplit ───────────
+        # 같은 파일의 겹치는 윈도우가 train/test에 흩어지면 누수 → 정확도 과대평가.
+        # 파일이 적으면(MVP) 윈도우 단위 무작위 분할로 폴백한다.
+        train_files = None  # None이면 폴백(오프셋 증강 없음)
         try:
-            X_tr, X_tmp, y_tr, y_tmp = train_test_split(X_norm, y, test_size=0.3, stratify=y, random_state=42)
-            X_val, X_te, y_val, y_te = train_test_split(X_tmp, y_tmp, test_size=0.5, stratify=y_tmp, random_state=42)
+            if len(set(groups)) < 4:
+                raise ValueError("그룹(파일) 수 부족 → 폴백")
+            g1 = GroupShuffleSplit(n_splits=1, test_size=0.3, random_state=42)
+            tr_idx, tmp_idx = next(g1.split(X0, y0, groups))
+            g2 = GroupShuffleSplit(n_splits=1, test_size=0.5, random_state=42)
+            v_rel, te_rel = next(g2.split(X0[tmp_idx], y0[tmp_idx], groups[tmp_idx]))
+            val_idx, test_idx = tmp_idx[v_rel], tmp_idx[te_rel]
+            if not (len(tr_idx) and len(val_idx) and len(test_idx)):
+                raise ValueError("분할 결과 빈 셋 → 폴백")
+            train_files = sorted(set(groups[tr_idx]))
+            X_val, y_val = X0[val_idx], y0[val_idx]
+            X_te,  y_te  = X0[test_idx], y0[test_idx]
+            mlflow.set_tag("split", "group_by_file")
         except ValueError:
-            # 데이터가 너무 적을 때 stratify 없이 분할
-            X_tr, X_tmp, y_tr, y_tmp = train_test_split(X_norm, y, test_size=0.3, random_state=42)
-            X_val, X_te, y_val, y_te = train_test_split(X_tmp, y_tmp, test_size=0.5, random_state=42)
+            # 윈도우 단위 무작위 분할 (구버전 동작, 오프셋 증강 없음)
+            try:
+                X_tr0, X_tmp, y_tr0, y_tmp = train_test_split(X0, y0, test_size=0.3, stratify=y0, random_state=42)
+                X_val, X_te, y_val, y_te = train_test_split(X_tmp, y_tmp, test_size=0.5, stratify=y_tmp, random_state=42)
+            except ValueError:
+                X_tr0, X_tmp, y_tr0, y_tmp = train_test_split(X0, y0, test_size=0.3, random_state=42)
+                X_val, X_te, y_val, y_te = train_test_split(X_tmp, y_tmp, test_size=0.5, random_state=42)
+            mlflow.set_tag("split", "window_fallback")
+
+        # ── 3. 정규화 통계 — train에서만 산출 (통계 누수 차단) ──────────
+        X_train_base = window_files(train_files, offset=0)[0] if train_files is not None else X_tr0
+        mean, std = compute_stats(X_train_base)
 
         def to_loader(X, y, shuffle):
             ds = TensorDataset(torch.tensor(X), torch.tensor(y))
             return DataLoader(ds, batch_size=64, shuffle=shuffle)
 
-        train_loader = to_loader(X_tr, y_tr, True)
-        val_loader   = to_loader(X_val, y_val, False)
-        test_loader  = to_loader(X_te, y_te, False)
+        # 평가셋: train 통계로 정규화, offset=0 고정
+        val_loader  = to_loader(normalize(X_val, mean, std), y_val, False)
+        test_loader = to_loader(normalize(X_te,  mean, std), y_te,  False)
+
+        # 폴백(윈도우 분할)이면 train 고정 — 오프셋 증강은 파일 분할일 때만
+        fixed_train_loader = to_loader(normalize(X_tr0, mean, std), y_tr0, True) if train_files is None else None
+
+        def epoch_train_loader():
+            """파일 분할이면 매 에폭 랜덤 오프셋으로 재윈도잉(위상 증강),
+            폴백이면 고정 로더 반환."""
+            if fixed_train_loader is not None:
+                return fixed_train_loader
+            off = random.randrange(STRIDE)            # [0, 100) — 위상 무작위
+            Xa, ya, _ = window_files(train_files, offset=off)
+            return to_loader(normalize(Xa, mean, std), ya, True)
 
         # ── 2. 학습 ─────────────────────────────────────────────────────
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -101,6 +148,7 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
         criterion = nn.CrossEntropyLoss()
 
         for epoch in range(1, epochs + 1):
+            train_loader = epoch_train_loader()   # 파일 분할이면 매 에폭 랜덤 오프셋 재윈도잉
             model.train()
             train_loss = 0.0
             for xb, yb in train_loader:
@@ -169,8 +217,8 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
                 pkg_path = os.path.join(out, "FitSet.mlpackage")
                 try:
                     from app.worker.convert import to_mlpackage
-                    to_mlpackage(model.cpu(), mean, std, pkg_path)
-                    upload_model_artifact(platform, version, pkg_path, "FitSet.mlpackage")
+                    zip_path = to_mlpackage(model.cpu(), mean, std, pkg_path)
+                    upload_model_artifact(platform, version, zip_path, "FitSet.mlpackage.zip")
                 except ImportError:
                     mlflow.set_tag("convert_warning", "coremltools not installed")
             else:
@@ -182,7 +230,7 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
                 except ImportError:
                     mlflow.set_tag("convert_warning", "ai.edge.torch not installed")
 
-            ext = "mlpackage" if platform == "ios" else "tflite"
+            ext = "mlpackage.zip" if platform == "ios" else "tflite"
             model_url = f"s3://{settings.models_bucket}/{platform}/{version}/FitSet.{ext}"
             meta = {
                 "platform": platform,

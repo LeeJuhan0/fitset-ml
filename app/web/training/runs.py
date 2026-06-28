@@ -1,7 +1,7 @@
 import mlflow
 from fastapi import APIRouter, Depends
 
-from app.api.deps import validate_platform
+from app.web.deps import validate_platform
 from app.core.config import settings
 
 router = APIRouter()

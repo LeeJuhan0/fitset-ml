@@ -1,6 +1,6 @@
-"""데이터 수집/조회 라우터 (app.api.data) — S3 의존은 monkeypatch."""
+"""데이터 수집/조회 라우터 (app.web.data.router) — S3 의존은 monkeypatch."""
 
-import app.api.data as data_mod
+import app.web.data.router as data_mod
 
 
 def test_list_data_wraps_index(client, monkeypatch):

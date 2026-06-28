@@ -1,4 +1,4 @@
-"""학습 시작/진행률 라우터 (app.api.train) — MLflow·subprocess·S3 가짜 대체.
+"""학습 시작/진행률 라우터 (app.web.training.router) — MLflow·subprocess·S3 가짜 대체.
 
 학습 워커 spawn(subprocess)과 MLflow run 생성은 부수효과이므로 모두 가짜로 막고,
 입력 검증(존재하지 않는 파일 400, 중복 학습 409)과 상태 매핑만 검증한다."""
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import app.api.train as train_mod
+import app.web.training.router as train_mod
 
 
 @pytest.fixture(autouse=True)

@@ -1,10 +1,10 @@
-"""앱용 모델 조회 + 버전 분포 (app.api.model).
+"""앱용 모델 조회 + 버전 분포 (app.web.deployment.model).
 
 version-stats 는 인메모리 집계라 테스트마다 상태를 초기화한다."""
 
 import pytest
 
-import app.api.model as model_mod
+import app.web.deployment.model as model_mod
 
 
 @pytest.fixture(autouse=True)

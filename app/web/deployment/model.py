@@ -3,7 +3,7 @@ from collections import defaultdict
 from fastapi import APIRouter, Depends
 from fastapi import HTTPException
 
-from app.api.deps import validate_platform
+from app.web.deps import validate_platform
 from app.core.s3 import get_latest
 
 router = APIRouter()

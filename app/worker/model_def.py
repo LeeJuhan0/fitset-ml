@@ -31,7 +31,7 @@ class FitSetModel(nn.Module):
 
 class WrappedModel(nn.Module):
     """정규화 + Softmax 내장 모델 — 변환 및 온디바이스 추론용"""
-
+    
     def __init__(self, model: FitSetModel, mean: list[float], std: list[float]):
         super().__init__()
         self.model = model

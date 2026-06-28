@@ -1,11 +1,11 @@
-"""MLflow run 목록/메트릭 히스토리 라우터 (app.api.runs) — MLflow 가짜 대체."""
+"""MLflow run 목록/메트릭 히스토리 라우터 (app.web.training.runs) — MLflow 가짜 대체."""
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-import app.api.runs as runs_mod
+import app.web.training.runs as runs_mod
 
 
 def _run(run_id, name, status, val_acc, start=1000, end=4000):

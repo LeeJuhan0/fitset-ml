@@ -1,0 +1,11 @@
+# 모델 변환 전용 의존성 — 변환을 실제 수행하는 환경에만 설치한다.
+#   pip install -r requirements.txt -r requirements-convert.txt
+# 미설치 시 trainer는 ImportError를 잡아 convert_warning 태그만 남기고 학습은 완료된다.
+
+# iOS — CoreML (비교적 가벼움 → 단일 박스에서 동작 가능)
+coremltools
+
+# Android — TFLite: ai-edge-torch가 TensorFlow·JAX·Keras 스택을 동반해 매우 무겁다.
+# t3.small(2GB RAM / 30GB)에선 디스크·RAM 부족으로 보류(No space left on device).
+# Android 변환 활성화 시 인스턴스 증설 후 아래 주석 해제.
+# ai-edge-torch

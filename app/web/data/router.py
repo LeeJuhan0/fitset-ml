@@ -3,7 +3,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from app.api.deps import validate_platform
+from app.web.deps import validate_platform
 from app.core.config import CLASSES
 from app.core.s3 import generate_presigned_upload_url, get_index, mark_uploaded, reserve_upload
 

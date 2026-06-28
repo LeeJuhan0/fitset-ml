@@ -1,14 +1,14 @@
-"""모델 배포 라우터 (app.api.deploy) — MLflow·S3 의존은 가짜로 대체.
+"""모델 배포 라우터 (app.web.deployment.router) — MLflow·S3 의존은 가짜로 대체.
 
 배포는 MLflow run 존재 확인 → latest.json 업데이트. 플랫폼별 모델 확장자
-(ios=.mlpackage / android=.tflite)가 올바른지 검증한다."""
+(ios=.mlpackage.zip / android=.tflite)가 올바른지 검증한다."""
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-import app.api.deploy as deploy_mod
+import app.web.deployment.router as deploy_mod
 
 
 def _install_fake_mlflow(monkeypatch, experiment, runs):
@@ -38,7 +38,7 @@ def test_deploy_404_when_version_run_missing(client, monkeypatch):
     assert resp.status_code == 404
 
 
-@pytest.mark.parametrize("platform,ext", [("ios", "mlpackage"), ("android", "tflite")])
+@pytest.mark.parametrize("platform,ext", [("ios", "mlpackage.zip"), ("android", "tflite")])
 def test_deploy_success_updates_latest(client, monkeypatch, platform, ext):
     exp = SimpleNamespace(experiment_id="exp-1")
     run = SimpleNamespace(info=SimpleNamespace(run_id="run-abc"))

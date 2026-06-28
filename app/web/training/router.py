@@ -6,7 +6,7 @@ import mlflow
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.api.deps import validate_platform
+from app.web.deps import validate_platform
 from app.core.config import settings
 from app.core.s3 import get_index, next_version
 

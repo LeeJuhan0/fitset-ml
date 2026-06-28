@@ -4,7 +4,7 @@ import mlflow
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.api.deps import validate_platform
+from app.web.deps import validate_platform
 from app.core.config import settings
 from app.core.s3 import get_latest, put_latest
 
@@ -32,7 +32,7 @@ def deploy(body: DeployRequest, platform: str = Depends(validate_platform)):
         raise HTTPException(status_code=404, detail=f"버전 {body.version}의 학습 결과가 없습니다.")
 
     run = runs[0]
-    ext = "mlpackage" if platform == "ios" else "tflite"
+    ext = "mlpackage.zip" if platform == "ios" else "tflite"
     model_path = f"s3://{settings.models_bucket}/{platform}/{body.version}/FitSet.{ext}"
 
     deployed_at = datetime.now(timezone.utc).isoformat()
