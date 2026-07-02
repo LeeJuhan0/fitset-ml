@@ -28,10 +28,35 @@ from app.core.s3 import download_csv, get_index, mark_trained, upload_model_arti
 from app.worker.model_def import FitSetModel
 from app.worker.preprocess import STRIDE, compute_stats, load_csv, normalize, sliding_window
 
+# ─────────────────────────────────────────────────────────────────────────────
+# [이 파일이 하는 일 — 학습 워커]
+#   웹(FastAPI) 핸들러가 미리 만들어 RUNNING 상태로 열어둔 MLflow run_id를 인자로
+#   넘겨받아, 별도 프로세스에서 학습 파이프라인 전체를 끝까지 수행한다:
+#     1) S3에서 CSV 다운로드        2) 슬라이딩 윈도우로 학습 데이터 구성
+#     3) train/val/test 분할        4) CNN-LSTM 학습 + 에폭마다 메트릭 기록
+#     5) test 평가                  6) 모델 저장·플랫폼별 변환·S3 업로드
+#     7) index.json에 학습 사용 표시
+#
+# [import한 심볼·클래스의 역할]
+#   FitSetModel        : 우리가 정의한 CNN-LSTM 분류 모델 클래스 (model_def.py). 학습 루프 위 설명 참고.
+#   load_csv           : CSV → (signals[N,6], labels[N])
+#   sliding_window     : 신호를 200샘플(=2초) 윈도우로 잘라 (X[M,200,6], y[M]) 생성
+#   compute_stats      : 채널별 mean·std 산출(정규화 기준값)   normalize: 그 값으로 정규화
+#   GroupShuffleSplit  : (sklearn 클래스) "그룹(=파일) 단위"로 데이터를 나눠 누수를 막는 분할기
+#   train_test_split   : (sklearn 함수) 단순 무작위 분할(파일 수가 적을 때 폴백용)
+#   TensorDataset      : (torch 클래스) (X, y) 텐서를 한 묶음(샘플=윈도우)으로 감싸는 데이터셋
+#   DataLoader         : (torch 클래스) 데이터셋을 배치 단위로 꺼내주고 셔플하는 반복자
+#   mlflow             : 학습 추적 라이브러리 (run/params/metrics/artifact 기록)
+# ─────────────────────────────────────────────────────────────────────────────
+
 
 def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, version: str):
+    # run_id: 웹 핸들러가 만든 기존 run에 "이어 붙는다". version: 모델 버전(예: v1.0)
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
 
+    # start_run(run_id=...) : 새 run을 만드는 게 아니라 그 run_id의 run에 재접속(reattach).
+    #   web의 create_run()은 RUNNING으로 열기만 했고, 여기 with 블록이 끝날 때 비로소
+    #   FINISHED로 마감된다 → run의 "끝"은 학습을 실제로 하는 이 워커가 책임진다.
     with mlflow.start_run(run_id=run_id):
         mlflow.log_params({
             # 학습 설정
@@ -58,16 +83,20 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
         })
 
         # ── 1. CSV 다운로드 (파일별 원신호 보관) ───────────────────────
+        # 인덱스(S3의 파일 목록 메타)에서 "파일명 → 종목(class)" 매핑을 만든다.
+        # 종목을 알아야 S3 키 {platform}/raw/{CLASS}/{filename} 를 조립해 내려받을 수 있다.
         index = get_index(platform)
         file_map = {f["filename"]: f["class"] for f in index["files"]}
 
+        # 파일별 원신호를 메모리에 보관 → 뒤에서 오프셋만 바꿔 여러 번 다시 윈도잉하기 위함.
+        # 임시 디렉토리는 with 블록을 나가면 자동 삭제(CSV 원본은 메모리에 이미 올렸으니 OK).
         per_file: dict[str, tuple] = {}   # filename -> (signals[N,6], labels[N])
         with tempfile.TemporaryDirectory() as tmp:
             for filename in files:
                 class_name = file_map[filename]
                 local = os.path.join(tmp, filename)
-                download_csv(platform, class_name, filename, local)
-                per_file[filename] = load_csv(local)
+                download_csv(platform, class_name, filename, local)   # S3 → 임시파일
+                per_file[filename] = load_csv(local)                  # CSV → (signals, labels)
 
         def window_files(file_list, offset=0):
             """주어진 파일들을 윈도우로 잘라 (X[M,200,6], y[M], groups[M]) 반환.
@@ -92,6 +121,13 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
         # ── 2. 분할 — 파일(recording) 단위 GroupShuffleSplit ───────────
         # 같은 파일의 겹치는 윈도우가 train/test에 흩어지면 누수 → 정확도 과대평가.
         # 파일이 적으면(MVP) 윈도우 단위 무작위 분할로 폴백한다.
+        #
+        # [GroupShuffleSplit 클래스(sklearn)란]
+        #   train_test_split과 달리 "그룹 id"를 받아, 같은 그룹은 통째로 한쪽(train 또는 test)에만
+        #   가도록 보장하는 분할기. 여기선 groups=윈도우의 출신 파일명 → "한 파일의 윈도우들은
+        #   절대 train과 test로 쪼개지지 않는다". 그래서 옆 윈도우끼리 겹쳐 생기는 정보 누수를 차단.
+        #   .split(X, y, groups) 가 (train_idx, test_idx) 인덱스 쌍을 yield → next()로 1개만 꺼냄.
+        #   여기선 두 번 적용: 먼저 70/30(train / tmp), 다시 tmp를 50/50(val / test)로.
         train_files = None  # None이면 폴백(오프셋 증강 없음)
         try:
             if len(set(groups)) < 4:
@@ -122,6 +158,9 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
         mean, std = compute_stats(X_train_base)
 
         def to_loader(X, y, shuffle):
+            # TensorDataset : (X, y) 두 텐서를 인덱스로 짝지어 ds[i] = (X[i], y[i]) 로 꺼내는 컨테이너.
+            # DataLoader    : 그 데이터셋을 batch_size(64)씩 묶고, shuffle=True면 매 에폭 순서를 섞어
+            #                 (xb, yb) 미니배치를 반복(iterate)하게 해주는 클래스. 학습 루프가 이걸 돈다.
             ds = TensorDataset(torch.tensor(X), torch.tensor(y))
             return DataLoader(ds, batch_size=64, shuffle=shuffle)
 
@@ -142,34 +181,42 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
             return to_loader(normalize(Xa, mean, std), ya, True)
 
         # ── 2. 학습 ─────────────────────────────────────────────────────
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # GPU 있으면 GPU
         model = FitSetModel(num_classes=len(CLASSES)).to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-        criterion = nn.CrossEntropyLoss()
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)   # 가중치 갱신 규칙(Adam)
+        criterion = nn.CrossEntropyLoss()                          # 분류 손실(정답 vs 예측 logits)
+        # [FitSetModel 클래스(model_def.py)의 구성 — 입력 [B,200,6], 출력 [B,5] logits]
+        #   conv : Conv1d(6→256, k=5) → BatchNorm → ReLU → MaxPool(2) → Dropout(0.25)
+        #          └ 6채널 IMU 시계열에서 지역적 패턴 추출, 길이 200→100으로 절반 다운샘플
+        #   lstm : LSTM(256→128). 시간축(100스텝)의 흐름을 요약 → 마지막 hidden state[ B,128 ] 사용
+        #   fc   : Linear(128→128) → ReLU → Linear(128→num_classes). 최종 종목별 점수(logits)
+        #   forward에서 permute로 [B,200,6]↔[B,6,200] 축을 Conv1d/LSTM 입력 규격에 맞춰 바꿈.
+        #   (별도 WrappedModel은 여기서 안 씀 — 변환 단계 convert.py에서 정규화+softmax 입혀 export)
 
+        # 에폭 반복: 매 에폭마다 train 1회 + val 1회. 파일 분할이면 train 로더를 매번 새로(랜덤 오프셋) 만든다.
         for epoch in range(1, epochs + 1):
             train_loader = epoch_train_loader()   # 파일 분할이면 매 에폭 랜덤 오프셋 재윈도잉
-            model.train()
+            model.train()                          # 학습 모드(Dropout·BatchNorm 활성)
             train_loss = 0.0
-            for xb, yb in train_loader:
+            for xb, yb in train_loader:            # 미니배치 반복
                 xb, yb = xb.to(device), yb.to(device)
-                optimizer.zero_grad()
-                loss = criterion(model(xb), yb)
-                loss.backward()
-                optimizer.step()
-                train_loss += loss.item() * len(xb)
-            train_loss /= len(train_loader.dataset)
+                optimizer.zero_grad()              # 이전 배치의 기울기 초기화
+                loss = criterion(model(xb), yb)    # 순전파 + 손실 계산
+                loss.backward()                    # 역전파(기울기 계산)
+                optimizer.step()                   # 가중치 갱신
+                train_loss += loss.item() * len(xb)   # 배치 손실 합(샘플 수로 가중)
+            train_loss /= len(train_loader.dataset)   # 에폭 평균 손실
 
-            model.eval()
+            model.eval()                           # 평가 모드(Dropout off, BatchNorm 고정)
             val_loss, val_correct = 0.0, 0
-            with torch.no_grad():
+            with torch.no_grad():                  # 기울기 계산 끔(메모리·속도)
                 for xb, yb in val_loader:
                     xb, yb = xb.to(device), yb.to(device)
-                    out = model(xb)
+                    out = model(xb)                          # logits [B,5]
                     val_loss += criterion(out, yb).item() * len(xb)
-                    val_correct += (out.argmax(1) == yb).sum().item()
+                    val_correct += (out.argmax(1) == yb).sum().item()  # argmax=예측 종목, 정답과 일치 수
             val_loss /= len(val_loader.dataset)
-            val_acc = val_correct / len(val_loader.dataset)
+            val_acc = val_correct / len(val_loader.dataset)   # 검증 정확도
 
             mlflow.log_metrics({
                 "epoch": epoch,
@@ -179,10 +226,12 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
             }, step=epoch)
 
         # ── 3. 평가 ─────────────────────────────────────────────────────
+        # 학습에 한 번도 안 쓴 test 셋으로 최종 성능 측정. f1_score(average="macro")는
+        # 종목별 F1을 평균 → 클래스 불균형에서도 소수 종목 성능을 공정히 반영한다.
         from sklearn.metrics import f1_score
 
         model.eval()
-        all_preds, all_true = [], []
+        all_preds, all_true = [], []   # 전체 예측/정답을 모아 f1 계산
         test_correct = 0
         with torch.no_grad():
             for xb, yb in test_loader:
@@ -201,7 +250,9 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
         })
 
         # ── 4. 모델 저장 & 변환 & S3 업로드 ─────────────────────────────
-        model.cpu()
+        model.cpu()   # 변환·저장은 CPU 텐서 기준
+        # mlflow.pytorch.log_model : 학습된 PyTorch 모델을 이 run의 아티팩트로 기록
+        #   → artifact_root(이 프로젝트선 S3)에 'pytorch_model/'로 업로드. MLflow가 관리하는 사본.
         mlflow.pytorch.log_model(
             pytorch_model=model,
             artifact_path="pytorch_model",
@@ -213,11 +264,16 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
             torch.save(model.state_dict(), pt_path)
             upload_model_artifact(platform, version, pt_path, "model.pt")
 
+            # 플랫폼별 온디바이스 포맷으로 변환해 별도 경로로도 업로드(앱이 직접 받는 배포용).
+            # 변환 함수 내부에서 학습 모델을 WrappedModel로 감싼다:
+            #   WrappedModel = 입력 정규화((x-mean)/std) + FitSetModel + softmax 를 한 그래프에 내장한 클래스.
+            #   → 앱은 raw IMU 값을 그대로 넣으면 확률이 나온다(전처리/후처리를 모델에 포함시켜 단순화).
+            # coremltools / ai.edge.torch 가 안 깔린 환경이면 변환만 건너뛰고 태그로 표시(학습은 성공 처리).
             if platform == "ios":
                 pkg_path = os.path.join(out, "FitSet.mlpackage")
                 try:
                     from app.worker.convert import to_mlpackage
-                    zip_path = to_mlpackage(model.cpu(), mean, std, pkg_path)
+                    zip_path = to_mlpackage(model.cpu(), mean, std, pkg_path)   # → CoreML .mlpackage(zip)
                     upload_model_artifact(platform, version, zip_path, "FitSet.mlpackage.zip")
                 except ImportError:
                     mlflow.set_tag("convert_warning", "coremltools not installed")
@@ -253,9 +309,14 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
             mlflow.log_artifact(meta_path)
 
         # ── 5. index.json 업데이트 ───────────────────────────────────────
+        # 이번에 학습에 쓴 파일들의 trainedInVersion 을 현재 version 으로 표시 →
+        # 대시보드가 "어떤 파일이 어느 버전 학습에 쓰였는지" 추적. (with 블록 종료 시 run이 FINISHED 됨)
         mark_trained(platform, files, version)
 
 
+# [엔트리포인트] 웹이 subprocess로 `python -m app.worker.trainer --platform ... --run-id ...` 처럼
+# 실행하면 이 블록이 돈다. CLI 인자를 파싱해 run(...)을 호출하는 게 전부.
+# --files 는 JSON 문자열로 받으므로 json.loads 로 리스트 복원.
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--platform", required=True)

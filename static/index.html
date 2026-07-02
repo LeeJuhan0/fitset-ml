@@ -63,6 +63,11 @@
     .badge.trained { background: #14532d; color: #4ade80; }
     .file-name { font-size: 13px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .select-count { font-size: 12px; color: #60a5fa; margin-bottom: 8px; }
+    .list-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .class-filter { padding: 6px 10px; background: #111; border: 1px solid #2a2a2a; border-radius: 6px; color: #e8e8e8; font-size: 12px; outline: none; }
+    .class-filter:focus { border-color: #2563eb; }
+    .select-all { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #aaa; cursor: pointer; user-select: none; margin-left: auto; }
+    .select-all input[type=checkbox] { accent-color: #2563eb; width: 14px; height: 14px; }
     .sidebar { display: flex; flex-direction: column; gap: 14px; }
     .form-group { display: flex; flex-direction: column; gap: 5px; }
     .form-group label { font-size: 11px; color: #777; text-transform: uppercase; letter-spacing: .04em; }
@@ -121,6 +126,15 @@
   <div id="mainView">
     <section>
       <h2>학습 데이터</h2>
+      <div class="list-toolbar">
+        <select class="class-filter" id="classFilter" onchange="renderFiles()">
+          <option value="">전체 종목</option>
+        </select>
+        <label class="select-all">
+          <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this.checked)" />
+          전체선택
+        </label>
+      </div>
       <p class="select-count" id="selectCount">0개 선택됨</p>
       <div class="file-list" id="fileList"><p class="empty">로딩 중...</p></div>
     </section>
@@ -214,21 +228,49 @@ async function api(method, path, body) {
   return data;
 }
 
+let allFiles = [];
+
 async function loadFiles() {
   const el = document.getElementById('fileList');
   el.innerHTML = '<p class="empty">로딩 중...</p>';
   try {
     const { data } = await api('GET', '/data');
-    if (!data.files.length) { el.innerHTML = '<p class="empty">CSV 파일이 없습니다</p>'; return; }
-    el.innerHTML = data.files.map(f => `
-      <div class="file-item ${selectedFiles.has(f.filename) ? 'selected' : ''}" onclick="toggleFile(this,'${f.filename}')">
-        <input type="checkbox" ${selectedFiles.has(f.filename) ? 'checked' : ''} onclick="event.stopPropagation();toggleFile(this.closest('.file-item'),'${f.filename}')"/>
-        <span class="file-name">${f.filename}</span>
-        <span class="badge">${f.class}</span>
-        ${f.trainedInVersion ? `<span class="badge trained">${f.trainedInVersion}</span>` : ''}
-      </div>`).join('');
-    updateSelectCount();
+    allFiles = data.files;
+    rebuildClassFilter();
+    renderFiles();
   } catch(e) { el.innerHTML = `<p class="empty" style="color:#f87171">${e.message}</p>`; }
+}
+
+// 데이터에 실제로 존재하는 종목으로 필터 옵션을 구성(현재 선택은 유지, 사라진 종목이면 전체로 복귀)
+function rebuildClassFilter() {
+  const sel = document.getElementById('classFilter');
+  const prev = sel.value;
+  const classes = [...new Set(allFiles.map(f => f.class))].sort();
+  sel.innerHTML = '<option value="">전체 종목</option>' +
+    classes.map(c => `<option value="${c}">${c}</option>`).join('');
+  sel.value = classes.includes(prev) ? prev : '';
+}
+
+// 현재 필터가 적용된, 종목별로 정렬된 목록
+function visibleFiles() {
+  const filter = document.getElementById('classFilter').value;
+  return allFiles
+    .filter(f => !filter || f.class === filter)
+    .sort((a, b) => a.class.localeCompare(b.class) || a.filename.localeCompare(b.filename));
+}
+
+function renderFiles() {
+  const el = document.getElementById('fileList');
+  const files = visibleFiles();
+  if (!files.length) { el.innerHTML = '<p class="empty">CSV 파일이 없습니다</p>'; updateSelectCount(); return; }
+  el.innerHTML = files.map(f => `
+    <div class="file-item ${selectedFiles.has(f.filename) ? 'selected' : ''}" onclick="toggleFile(this,'${f.filename}')">
+      <input type="checkbox" ${selectedFiles.has(f.filename) ? 'checked' : ''} onclick="event.stopPropagation();toggleFile(this.closest('.file-item'),'${f.filename}')"/>
+      <span class="file-name">${f.filename}</span>
+      <span class="badge">${f.class}</span>
+      ${f.trainedInVersion ? `<span class="badge trained">${f.trainedInVersion}</span>` : ''}
+    </div>`).join('');
+  updateSelectCount();
 }
 
 function toggleFile(el, name) {
@@ -236,8 +278,19 @@ function toggleFile(el, name) {
   else { selectedFiles.add(name); el.classList.add('selected'); el.querySelector('input').checked = true; }
   updateSelectCount();
 }
+
+// 전체선택: 현재 필터로 보이는 파일들만 대상으로 선택/해제
+function toggleSelectAll(checked) {
+  visibleFiles().forEach(f =>
+    checked ? selectedFiles.add(f.filename) : selectedFiles.delete(f.filename));
+  renderFiles();
+}
+
 function updateSelectCount() {
   document.getElementById('selectCount').textContent = `${selectedFiles.size}개 선택됨`;
+  const files = visibleFiles();
+  document.getElementById('selectAll').checked =
+    files.length > 0 && files.every(f => selectedFiles.has(f.filename));
 }
 
 async function startTrain() {
