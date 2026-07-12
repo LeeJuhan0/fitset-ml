@@ -1,15 +1,13 @@
-"""S3 스토리지 — fitset-raw-data(학습 데이터) / fitset-models(모델 아티팩트)"""
-# ─────────────────────────────────────────────────────────────────────────────
-# S3 접근 계층(core). web 라우터·worker(trainer)가 모두 이 헬퍼들을 통해 S3를 읽고 쓴다.
-# 두 종류 데이터: ① 수집 CSV + index.json(raw_data_bucket)  ② 모델 + latest.json(models_bucket)
-# index.json은 동시 쓰기 보호를 위해 ETag 기반 낙관적 락(조건부 PUT)을 쓴다.
-# ─────────────────────────────────────────────────────────────────────────────
+"""S3 인프라 계층 — 클라이언트, 키 조립, index.json ETag 낙관적 락 엔진.
+
+각 도메인의 repository(app/{data,training,deployment}/repository.py)가 이 모듈 위에서
+자기 도메인의 저장소 접근을 구현한다. 여기에는 도메인 규칙이 없다.
+worker(별도 프로세스)는 web 도메인 패키지를 import하지 않으므로, worker가 쓰는
+헬퍼(download_csv, upload_model_artifact, mark_trained)는 core에 둔다.
+"""
 
 import json
-import re
-import threading   # 인프로세스 예약 직렬화 락
 import time        # 충돌 재시도 백오프
-from datetime import datetime, timezone
 from typing import Callable   # mutate 콜백 타입
 
 import boto3                              # AWS SDK
@@ -30,7 +28,7 @@ def _client():
     return _s3
 
 
-# ── 내부 경로 헬퍼 ──────────────────────────────────────────────────────────
+# ── 키 조립 헬퍼 ─────────────────────────────────────────────────────────────
 # S3 키(경로) 문자열을 한 곳에서 조립 → 규칙 일관성 유지.
 
 def _index_key(platform: str) -> str:
@@ -46,7 +44,7 @@ def _latest_key(platform: str) -> str:
     return f"{platform}/latest.json"                      # 예: ios/latest.json
 
 
-# ── index.json ──────────────────────────────────────────────────────────────
+# ── index.json 엔진 ──────────────────────────────────────────────────────────
 
 def _get_index_with_etag(platform: str) -> tuple[dict, str | None]:
     """index.json 본문과 ETag를 함께 읽는다. 없으면 (빈 인덱스, None)."""
@@ -64,7 +62,7 @@ def _get_index_with_etag(platform: str) -> tuple[dict, str | None]:
 
 
 def get_index(platform: str) -> dict:
-    # 외부에 공개된 단순 조회(ETag 버림). data/router·training/router가 사용.
+    # 외부에 공개된 단순 조회(ETag 버림). data·training 도메인이 사용.
     data, _ = _get_index_with_etag(platform)
     return data
 
@@ -96,7 +94,7 @@ def update_index(platform: str, mutate: Callable[[dict], None]) -> dict:
 
     mutate(index)는 index dict를 제자리(in-place)에서 변경하는 콜백.
     """
-    # mutate: 호출자가 넘기는 "인덱스를 어떻게 바꿀지" 함수(mark_trained/_reserve/_mark 등).
+    # mutate: 호출자가 넘기는 "인덱스를 어떻게 바꿀지" 함수(각 도메인 repository가 정의).
     for attempt in range(_INDEX_MAX_RETRIES):
         data, etag = _get_index_with_etag(platform)   # 최신본 + ETag 읽기
         mutate(data)                                  # 콜백이 data를 제자리 수정
@@ -114,6 +112,8 @@ def update_index(platform: str, mutate: Callable[[dict], None]) -> dict:
     raise RuntimeError(f"index.json 동시 갱신 재시도 초과: {platform}")   # 5회 실패
 
 
+# ── worker 전용 헬퍼 (worker→core 단방향 의존을 지키기 위해 core에 둔다) ──────
+
 def mark_trained(platform: str, filenames: list[str], version: str):
     # trainer.py 마지막 단계: 학습에 쓴 파일들의 trainedInVersion을 version으로 기록.
     name_set = set(filenames)
@@ -126,143 +126,6 @@ def mark_trained(platform: str, filenames: list[str], version: str):
     update_index(platform, _mark)
 
 
-# ── 파일명 예약(서버가 인덱스 보고 이름 부여) ────────────────────────────────
-
-# 예약을 직렬화하는 인프로세스 락 — "동기 처리"로 동시 요청에 같은 번호가 안 나가게.
-# (update_index의 ETag 조건부 쓰기가 교차 프로세스까지 보장하고, 이 락은 인프로세스 직렬화)
-_reserve_lock = threading.Lock()
-
-
-def reserve_upload(platform: str, class_name: str, device_id: str) -> str:
-    """인덱스를 보고 다음 파일명을 정해 예약(uploaded=False)하고 그 파일명을 반환한다.
-
-    파일명: ``{CLASS}_{deviceId}_{NNNN}.csv`` — 해당 class+deviceId의 다음 순번.
-    동기 처리: 인프로세스 락 + update_index(낙관적 락)로 동시 요청에도 번호가
-    중복되지 않게 직렬화한다.
-    """
-    # data/router.presigned_url이 호출. 반환된 파일명으로 presigned URL을 만든다.
-    assigned: dict = {}   # 콜백이 정한 파일명을 밖으로 빼내는 통로
-
-    def _reserve(index: dict):
-        files = index["files"]
-        existing = {f["filename"] for f in files}
-        seq = sum(   # 같은 class+deviceId 파일 개수 + 1 = 다음 순번
-            1 for f in files
-            if f.get("class") == class_name and f.get("deviceId") == device_id
-        ) + 1
-        filename = f"{class_name}_{device_id}_{seq:04d}.csv"   # 0001 형태(4자리)
-        while filename in existing:  # 구멍/중복 방지
-            seq += 1
-            filename = f"{class_name}_{device_id}_{seq:04d}.csv"
-        files.append({               # 예약 항목 추가(아직 업로드 전)
-            "filename": filename,
-            "class": class_name,
-            "deviceId": device_id,
-            "collectedAt": datetime.now(timezone.utc).isoformat(),
-            "uploaded": False,
-            "trainedInVersion": None,
-        })
-        assigned["filename"] = filename
-
-    with _reserve_lock:               # 인프로세스 직렬화
-        update_index(platform, _reserve)
-    return assigned["filename"]
-
-
-def mark_uploaded(platform: str, filename: str) -> bool:
-    """예약된 항목을 업로드 완료(uploaded=True)로 표시한다.
-
-    해당 filename 항목을 찾아 표시하면 True, 없으면 False를 반환한다(멱등).
-    """
-    # data/router.upload_confirm이 호출. 찾았는지 여부를 bool로 돌려준다.
-    result = {"found": False}
-
-    def _mark(index: dict):
-        result["found"] = False  # 재시도마다 리셋
-        for f in index["files"]:
-            if f["filename"] == filename:
-                f["uploaded"] = True
-                result["found"] = True
-                return
-
-    update_index(platform, _mark)
-    return result["found"]
-
-
-# ── latest.json ─────────────────────────────────────────────────────────────
-
-def get_latest(platform: str) -> dict | None:
-    # deployment/model.py·router.py가 사용. 배포된 최신 모델 정보(없으면 None).
-    try:
-        obj = _client().get_object(
-            Bucket=settings.models_bucket,
-            Key=_latest_key(platform),
-        )
-        data = json.loads(obj["Body"].read())
-        if not data.get("version"):   # 빈/무효 latest는 None 취급
-            return None
-        return data
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "NoSuchKey":
-            return None
-        raise
-
-
-def put_latest(platform: str, data: dict):
-    # deployment/router.deploy가 사용. 배포 정보를 latest.json에 덮어쓰기(조건 없음).
-    _client().put_object(
-        Bucket=settings.models_bucket,
-        Key=_latest_key(platform),
-        Body=json.dumps(data, ensure_ascii=False, indent=2),
-        ContentType="application/json",
-    )
-
-
-# ── 모델 버전 목록 ───────────────────────────────────────────────────────────
-
-def list_model_versions(platform: str) -> list[str]:
-    # models_bucket의 {platform}/ 아래 "폴더(prefix)"들을 훑어 v×.× 버전만 추린다.
-    paginator = _client().get_paginator("list_objects_v2")   # 페이지 단위 목록 조회기
-    pages = paginator.paginate(
-        Bucket=settings.models_bucket,
-        Prefix=f"{platform}/",
-        Delimiter="/",          # "/"로 끊어 하위 폴더(CommonPrefixes)만 받기
-    )
-    versions = []
-    for page in pages:
-        for prefix in page.get("CommonPrefixes", []):        # 각 하위 폴더
-            name = prefix["Prefix"].rstrip("/").split("/")[-1]   # 마지막 경로 조각(폴더명)
-            if re.match(r"v\d+\.\d+", name):                 # v숫자.숫자 형태만
-                versions.append(name)
-    return sorted(versions)     # 오름차순(문자열 정렬)
-
-
-def next_version(platform: str) -> str:
-    # training/router.start_training이 사용. 다음 버전 문자열 채번.
-    versions = list_model_versions(platform)
-    if not versions:
-        return "v1.0"           # 첫 버전
-    major, minor = map(int, versions[-1][1:].split("."))   # 마지막 버전 "v1.3" → (1,3)
-    return f"v{major}.{minor + 1}"   # minor +1
-
-
-# ── Presigned URL ────────────────────────────────────────────────────────────
-
-def generate_presigned_upload_url(platform: str, class_name: str, filename: str, expires: int = 300) -> str:
-    # data/router.presigned_url이 사용. 클라이언트가 직접 PUT할 수 있는 임시 서명 URL 생성.
-    return _client().generate_presigned_url(
-        "put_object",           # 허용 동작: 업로드(PUT)
-        Params={
-            "Bucket": settings.raw_data_bucket,
-            "Key": _csv_key(platform, class_name, filename),   # 업로드될 키
-            "ContentType": "text/csv",                         # 업로드 시 이 Content-Type이어야 함
-        },
-        ExpiresIn=expires,      # 유효시간(초, 기본 300)
-    )
-
-
-# ── CSV 다운로드 ─────────────────────────────────────────────────────────────
-
 def download_csv(platform: str, class_name: str, filename: str, local_path: str):
     # trainer.py가 사용. S3의 CSV를 로컬 임시파일(local_path)로 내려받는다.
     _client().download_file(
@@ -271,8 +134,6 @@ def download_csv(platform: str, class_name: str, filename: str, local_path: str)
         Filename=local_path,
     )
 
-
-# ── 모델 업로드 ──────────────────────────────────────────────────────────────
 
 def upload_model_artifact(platform: str, version: str, local_path: str, filename: str):
     # trainer.py가 사용. 로컬 산출물(local_path)을 models_bucket의 {platform}/{version}/{filename}로 올린다.

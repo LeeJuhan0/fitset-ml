@@ -1,4 +1,4 @@
-"""모델 배포 라우터 (app.web.deployment.router) — MLflow·S3 의존은 가짜로 대체.
+"""모델 배포 API (app.deployment) — MLflow·S3 의존은 service 네임스페이스에서 가짜로 대체.
 
 배포는 MLflow run 존재 확인 → latest.json 업데이트. 플랫폼별 모델 확장자
 (ios=.mlpackage.zip / android=.tflite)가 올바른지 검증한다."""
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import app.web.deployment.router as deploy_mod
+import app.deployment.service as deploy_mod
 
 
 def _install_fake_mlflow(monkeypatch, experiment, runs):

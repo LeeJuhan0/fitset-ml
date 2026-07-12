@@ -1,0 +1,42 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# data 도메인 규칙 — I/O 없는 순수 함수/상수만 둔다. (S3·FastAPI import 금지)
+# 파일명 채번, deviceId·종목 형식 규칙이 이 도메인의 불변식이다.
+# ─────────────────────────────────────────────────────────────────────────────
+import re
+
+from app.core.config import CLASSES   # 허용 종목 목록 (설정 상수 — I/O 아님)
+
+# deviceId는 S3 키에 들어가므로 경로 조작/이상문자 차단 — 영숫자·_·-, 1~64자만 허용
+DEVICE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def is_supported_class(class_name: str) -> bool:
+    # 종목 라벨 규칙: CLASSES에 등록된 값만 허용
+    return class_name in CLASSES
+
+
+def is_valid_device_id(device_id: str) -> bool:
+    return bool(DEVICE_ID_RE.match(device_id))
+
+
+def make_filename(class_name: str, device_id: str, seq: int) -> str:
+    # 파일명 규칙: {CLASS}_{deviceId}_{NNNN}.csv (순번 4자리)
+    return f"{class_name}_{device_id}_{seq:04d}.csv"
+
+
+def next_filename(files: list[dict], class_name: str, device_id: str) -> str:
+    """인덱스의 기존 파일 목록을 보고 다음 파일명을 정한다 (순수 계산).
+
+    같은 class+deviceId 파일 개수 + 1 = 다음 순번. 이미 존재하는 이름과
+    겹치면(삭제로 생긴 구멍 등) 순번을 올려 충돌을 피한다.
+    """
+    existing = {f["filename"] for f in files}
+    seq = sum(
+        1 for f in files
+        if f.get("class") == class_name and f.get("deviceId") == device_id
+    ) + 1
+    filename = make_filename(class_name, device_id, seq)
+    while filename in existing:  # 구멍/중복 방지
+        seq += 1
+        filename = make_filename(class_name, device_id, seq)
+    return filename

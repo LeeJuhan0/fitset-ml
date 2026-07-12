@@ -18,6 +18,7 @@ from moto import mock_aws  # noqa: E402
 import boto3  # noqa: E402
 
 import app.core.s3 as s3  # noqa: E402
+import app.data.repository as data_repo  # noqa: E402
 from app.core.config import settings  # noqa: E402
 
 
@@ -55,9 +56,9 @@ def test_update_index_creates_then_appends(s3_backed):
 
 def test_reserve_upload_assigns_sequential_names(s3_backed):
     # 같은 class+deviceId → 순번 증가, 다른 deviceId → 별도 순번
-    f1 = s3.reserve_upload("ios", "SQUAT", "DEV1")
-    f2 = s3.reserve_upload("ios", "SQUAT", "DEV1")
-    f3 = s3.reserve_upload("ios", "SQUAT", "DEV2")
+    f1 = data_repo.reserve_upload("ios", "SQUAT", "DEV1")
+    f2 = data_repo.reserve_upload("ios", "SQUAT", "DEV1")
+    f3 = data_repo.reserve_upload("ios", "SQUAT", "DEV2")
     assert f1 == "SQUAT_DEV1_0001.csv"
     assert f2 == "SQUAT_DEV1_0002.csv"
     assert f3 == "SQUAT_DEV2_0001.csv"
@@ -68,8 +69,8 @@ def test_reserve_upload_assigns_sequential_names(s3_backed):
 
 
 def test_mark_uploaded_flips_flag(s3_backed):
-    fn = s3.reserve_upload("ios", "PUSHUP", "DEV1")
-    s3.mark_uploaded("ios", fn)
+    fn = data_repo.reserve_upload("ios", "PUSHUP", "DEV1")
+    data_repo.mark_uploaded("ios", fn)
     entry = next(f for f in _read(s3_backed)["files"] if f["filename"] == fn)
     assert entry["uploaded"] is True
 
@@ -82,7 +83,7 @@ def test_reserve_upload_concurrent_no_duplicate_numbers(s3_backed):
     lock = threading.Lock()
 
     def worker():
-        fn = s3.reserve_upload("ios", "REST", "DEV1")
+        fn = data_repo.reserve_upload("ios", "REST", "DEV1")
         with lock:
             names.append(fn)
 

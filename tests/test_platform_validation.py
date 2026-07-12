@@ -29,7 +29,7 @@ def test_invalid_platform_returns_400(client, method, path, bad):
 @pytest.mark.parametrize("good", ["ios", "android"])
 def test_valid_platform_passes_validation(client, monkeypatch, good):
     # 검증 통과 후 S3 호출은 막는다 — 검증 자체만 확인
-    import app.web.data.router as data_mod
+    import app.data.service as data_mod
     monkeypatch.setattr(data_mod, "get_index", lambda p: {"platform": p, "files": []})
 
     resp = client.get(f"/api/v1/{good}/data")

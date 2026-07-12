@@ -1,7 +1,8 @@
-"""app.core.s3 의 순수 로직 단위 테스트 (boto3 클라이언트는 가짜로 대체).
+"""S3 저장 계층 단위 테스트 (boto3 클라이언트는 가짜로 대체).
 
-플랫폼별 S3 키 조립 규칙과 버전 파싱/증가 로직은 플랫폼 엄격 분리의 핵심이므로
-외부 의존 없이 직접 검증한다."""
+인프라 엔진(app.core.s3)과 도메인 repository(deployment=latest 캐시·presign,
+training=버전 채번)를 함께 검증한다. repository들은 core.s3._client()를 모듈 참조로
+쓰므로, s3._client 하나만 가짜로 갈아끼우면 전부 통제된다."""
 
 import json
 
@@ -9,6 +10,8 @@ import pytest
 from botocore.exceptions import ClientError
 
 import app.core.s3 as s3
+import app.deployment.repository as dep_repo
+import app.training.repository as train_repo
 
 
 class _Body:
@@ -30,21 +33,111 @@ def test_key_builders():
     assert s3._latest_key("android") == "android/latest.json"
 
 
+# ── latest.json 캐시 ─────────────────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def clear_latest_cache():
+    # 테스트 간 캐시 오염 방지
+    dep_repo._latest_cache.clear()
+    yield
+    dep_repo._latest_cache.clear()
+
+
+class _CountingLatestClient:
+    """get_object 호출 횟수를 세는 가짜 S3 클라이언트."""
+
+    def __init__(self, payload: dict):
+        self.payload = payload
+        self.get_calls = 0
+        self.put_calls = 0
+
+    def get_object(self, **kwargs):
+        self.get_calls += 1
+        return {"Body": _Body(json.dumps(self.payload))}
+
+    def put_object(self, **kwargs):
+        self.put_calls += 1
+
+
+def test_get_latest_caches_within_ttl(monkeypatch):
+    fake = _CountingLatestClient({"version": "v1.0", "modelUrl": "s3://m/x"})
+    monkeypatch.setattr(s3, "_client", lambda: fake)
+
+    assert dep_repo.get_latest("ios")["version"] == "v1.0"
+    assert dep_repo.get_latest("ios")["version"] == "v1.0"
+    assert fake.get_calls == 1   # 두 번째는 캐시 히트 → S3 안 감
+
+
+def test_get_latest_refetches_after_ttl(monkeypatch):
+    fake = _CountingLatestClient({"version": "v1.0", "modelUrl": "s3://m/x"})
+    monkeypatch.setattr(s3, "_client", lambda: fake)
+
+    dep_repo.get_latest("ios")
+    # 읽은 시각을 TTL 이전으로 되돌려 만료 상황을 만든다
+    ts, data = dep_repo._latest_cache["ios"]
+    dep_repo._latest_cache["ios"] = (ts - dep_repo._LATEST_TTL_SECONDS - 1, data)
+
+    dep_repo.get_latest("ios")
+    assert fake.get_calls == 2   # 만료 → S3 재조회
+
+
+def test_put_latest_write_through(monkeypatch):
+    fake = _CountingLatestClient({"version": "v1.0", "modelUrl": "s3://m/x"})
+    monkeypatch.setattr(s3, "_client", lambda: fake)
+
+    dep_repo.put_latest("ios", {"version": "v2.0", "modelUrl": "s3://m/y"})
+    assert fake.put_calls == 1
+    # 배포 직후 조회는 S3 안 가고 새 버전을 즉시 반환
+    assert dep_repo.get_latest("ios")["version"] == "v2.0"
+    assert fake.get_calls == 0
+
+
+def test_get_latest_caches_none_and_platforms_isolated(monkeypatch):
+    fake = _CountingLatestClient({"version": None})   # 구스키마/미배포
+    monkeypatch.setattr(s3, "_client", lambda: fake)
+
+    assert dep_repo.get_latest("ios") is None
+    assert dep_repo.get_latest("ios") is None
+    assert fake.get_calls == 1   # None 결과도 캐시
+
+    dep_repo.get_latest("android")     # 다른 플랫폼은 별도 엔트리
+    assert fake.get_calls == 2
+
+
+# ── presigned 모델 다운로드 URL ──────────────────────────────────────────────
+
+def test_generate_presigned_model_download_url_parses_s3_url(monkeypatch):
+    captured = {}
+
+    class _FakeClient:
+        def generate_presigned_url(self, op, Params, ExpiresIn):
+            captured.update(op=op, params=Params, expires=ExpiresIn)
+            return "https://signed.example/x"
+
+    monkeypatch.setattr(s3, "_client", lambda: _FakeClient())
+    url = dep_repo.generate_presigned_model_download_url("s3://fitset-models/ios/v1.3/FitSet.mlpackage.zip")
+
+    assert url == "https://signed.example/x"
+    assert captured["op"] == "get_object"
+    assert captured["params"] == {"Bucket": "fitset-models", "Key": "ios/v1.3/FitSet.mlpackage.zip"}
+    assert captured["expires"] == 3600
+
+
 # ── next_version / 버전 파싱 ─────────────────────────────────────────────────
 
 def test_next_version_empty_starts_at_v1_0(monkeypatch):
-    monkeypatch.setattr(s3, "list_model_versions", lambda p: [])
-    assert s3.next_version("ios") == "v1.0"
+    monkeypatch.setattr(train_repo, "list_model_versions", lambda p: [])
+    assert train_repo.next_version("ios") == "v1.0"
 
 
 def test_next_version_increments_minor(monkeypatch):
-    monkeypatch.setattr(s3, "list_model_versions", lambda p: ["v1.0", "v1.1", "v1.2"])
-    assert s3.next_version("ios") == "v1.3"
+    monkeypatch.setattr(train_repo, "list_model_versions", lambda p: ["v1.0", "v1.1", "v1.2"])
+    assert train_repo.next_version("ios") == "v1.3"
 
 
 def test_next_version_uses_latest_sorted(monkeypatch):
-    monkeypatch.setattr(s3, "list_model_versions", lambda p: ["v1.0", "v1.9"])
-    assert s3.next_version("android") == "v1.10"
+    monkeypatch.setattr(train_repo, "list_model_versions", lambda p: ["v1.0", "v1.9"])
+    assert train_repo.next_version("android") == "v1.10"
 
 
 class _FakePaginator:
@@ -63,7 +156,7 @@ def test_list_model_versions_filters_non_version_prefixes(monkeypatch):
             return _FakePaginator(prefixes)
 
     monkeypatch.setattr(s3, "_client", lambda: _FakeClient())
-    assert s3.list_model_versions("ios") == ["v1.0", "v1.2"]
+    assert train_repo.list_model_versions("ios") == ["v1.0", "v1.2"]
 
 
 # ── get_index: NoSuchKey 시 빈 인덱스 폴백 ────────────────────────────────────

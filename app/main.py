@@ -6,12 +6,10 @@ from fastapi import FastAPI                              # FastAPI: ASGI 웹앱 
 from fastapi.middleware.cors import CORSMiddleware        # 브라우저 교차출처(CORS) 허용 미들웨어
 from fastapi.staticfiles import StaticFiles               # 정적 파일(대시보드) 서빙용
 
-# 각 도메인의 APIRouter를 별칭으로 가져온다. (router 객체 = 해당 파일에 정의된 엔드포인트 묶음)
-from app.web.data.router import router as data_router          # GET /data, /data/presigned-url, POST /data/upload-confirm
-from app.web.training.router import router as train_router     # POST /train, GET /train/status
-from app.web.training.runs import router as runs_router        # GET /runs, /runs/{run_id}/history
-from app.web.deployment.router import router as deploy_router  # POST /deploy
-from app.web.deployment.model import router as model_router    # GET /model/latest, /model/version-stats
+# 각 도메인의 APIRouter를 별칭으로 가져온다. (router 객체 = 해당 도메인의 엔드포인트 묶음)
+from app.data.router import router as data_router          # GET /data, /data/presigned-url, POST /data/upload-confirm
+from app.training.router import router as train_router     # POST /train, GET /train/status, /runs, /runs/{id}/history
+from app.deployment.router import router as deploy_router  # POST /deploy, GET /model/latest, /model/version-stats
 
 # FastAPI(title, version) : OpenAPI 문서(/docs)에 표시되는 메타. app은 모든 라우트·미들웨어의 컨테이너.
 app = FastAPI(title="FitSet ML Server", version="1.0.0")
@@ -29,8 +27,6 @@ app.add_middleware(
 app.include_router(data_router)
 app.include_router(train_router)
 app.include_router(deploy_router)
-app.include_router(model_router)
-app.include_router(runs_router)
 
 # mount("/", StaticFiles(...)) : 루트 경로에 정적 파일 서버를 붙임 → static/ 의 대시보드(HTML/JS) 서빙.
 #   directory="static": 서빙할 폴더, html=True: 디렉토리 요청 시 index.html 반환.

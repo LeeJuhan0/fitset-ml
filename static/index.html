@@ -93,6 +93,26 @@
     .run-link { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #60a5fa; text-decoration: none; margin-top: 10px; padding: 7px 10px; border-radius: 6px; border: 1px solid #1e3a5f; background: #0a1a2e; }
     .run-link:hover { border-color: #60a5fa; }
     .empty { color: #3a3a3a; font-size: 13px; text-align: center; padding: 20px 0; }
+
+    /* ── 학습 이력 테이블 ── */
+    .runs-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .runs-table th { text-align: left; color: #555; font-weight: 500; padding: 6px 8px; border-bottom: 1px solid #222; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; }
+    .runs-table td { padding: 7px 8px; border-bottom: 1px solid #1c1c1c; white-space: nowrap; }
+    .runs-table tr:hover td { background: #1a1a1a; }
+    .badge.deployed { background: #1e3a5f; color: #60a5fa; }
+    .badge.best { background: #422006; color: #fbbf24; }
+    .badge.failed { background: #450a0a; color: #f87171; }
+    .btn-deploy-row { padding: 3px 10px; font-size: 11px; border-radius: 5px; border: 1px solid #166534; background: transparent; color: #4ade80; cursor: pointer; }
+    .btn-deploy-row:hover { background: #14532d; }
+
+    /* ── 버전 분포 ── */
+    .dist-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 7px; }
+    .dist-version { width: 44px; font-weight: 600; flex-shrink: 0; }
+    .dist-track { flex: 1; background: #1a1a1a; border-radius: 99px; height: 6px; }
+    .dist-fill { background: #2563eb; border-radius: 99px; height: 6px; }
+    .dist-fill.latest { background: #4ade80; }
+    .dist-num { width: 78px; text-align: right; color: #888; font-size: 11px; flex-shrink: 0; }
+    .dist-caption { font-size: 11px; color: #555; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -139,6 +159,11 @@
       <div class="file-list" id="fileList"><p class="empty">로딩 중...</p></div>
     </section>
 
+    <section style="grid-column: 1">
+      <h2>학습 이력 · 배포</h2>
+      <div style="overflow-x:auto" id="runsBox"><p class="empty">로딩 중...</p></div>
+    </section>
+
     <div class="sidebar">
       <section>
         <h2>학습 설정</h2>
@@ -175,6 +200,11 @@
         <div id="modelInfo"><p class="empty">로딩 중...</p></div>
         <button class="btn btn-success" id="deployBtn" onclick="deployModel()" style="width:100%;margin-top:12px;display:none">이 버전 배포</button>
       </section>
+
+      <section>
+        <h2>버전 분포</h2>
+        <div id="versionStats"><p class="empty">로딩 중...</p></div>
+      </section>
     </div>
   </div>
 </div>
@@ -193,6 +223,8 @@ function unlock() {
     document.getElementById('appView').style.display = 'block';
     loadFiles();
     loadModelInfo();
+    loadRuns();
+    loadVersionStats();
   } else {
     errEl.textContent = '암호가 틀렸습니다';
     input.classList.add('error');
@@ -206,6 +238,9 @@ let selectedFiles = new Set();
 let pollTimer = null;
 let currentJobId = null;
 let lastVersion = null;
+let deployedVersion = null;   // 현재 배포 버전 (loadModelInfo가 채움 — 이력 테이블 배지용)
+let runsData = [];            // GET /runs 결과 캐시 (배포 버전 갱신 시 재렌더용)
+let bestRunId = null;
 
 function setPlatform(p) {
   platform = p;
@@ -215,6 +250,8 @@ function setPlatform(p) {
   clearPoll();
   loadFiles();
   loadModelInfo();
+  loadRuns();
+  loadVersionStats();
 }
 
 async function api(method, path, body) {
@@ -346,6 +383,7 @@ function pollStatus() {
       if (status === 'completed' || status === 'failed') {
         clearPoll();
         document.getElementById('trainBtn').disabled = false;
+        loadRuns();
         if (status === 'completed') {
           document.getElementById('deployBtn').dataset.version = lastVersion;
           document.getElementById('deployBtn').style.removeProperty('display');
@@ -358,16 +396,26 @@ function pollStatus() {
 function clearPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
 
 async function deployModel() {
-  const version = document.getElementById('deployBtn').dataset.version;
+  deployVersion(document.getElementById('deployBtn').dataset.version);
+}
+
+// 이력 테이블·완료 배너 공용 배포 액션 — 과거 버전 재배포(롤백)도 이 경로를 쓴다
+async function deployVersion(version) {
   if (!confirm(`${version} 배포하시겠습니까?`)) return;
-  try { await api('POST', '/deploy', { version }); alert('배포 완료!'); loadModelInfo(); }
-  catch(e) { alert(e.message); }
+  try {
+    await api('POST', '/deploy', { version });
+    alert('배포 완료!');
+    loadModelInfo();
+    loadRuns();
+    loadVersionStats();
+  } catch(e) { alert(e.message); }
 }
 
 async function loadModelInfo() {
   const el = document.getElementById('modelInfo');
   try {
     const { data } = await api('GET', '/model/latest');
+    deployedVersion = data.latestVersion;
     el.innerHTML = `
       <div style="display:flex;flex-direction:column;gap:8px">
         <div style="display:flex;justify-content:space-between;font-size:13px">
@@ -376,8 +424,74 @@ async function loadModelInfo() {
         <div style="font-size:11px;color:#444;word-break:break-all">${data.modelUrl}</div>
       </div>`;
   } catch(e) {
+    deployedVersion = null;
     el.innerHTML = `<p class="empty">${e.message.includes('404') ? '배포된 모델 없음' : e.message}</p>`;
   }
+  renderRuns();   // 배포 배지가 최신 배포 버전을 따라가도록 재렌더
+}
+
+// ── 학습 이력 · 선택 배포 ──────────────────────────────────────────────
+
+async function loadRuns() {
+  const el = document.getElementById('runsBox');
+  try {
+    const { data } = await api('GET', '/runs');
+    runsData = data.runs || [];
+    bestRunId = data.bestRunId ?? null;
+    renderRuns();
+  } catch(e) { el.innerHTML = `<p class="empty" style="color:#f87171">${e.message}</p>`; }
+}
+
+function renderRuns() {
+  const el = document.getElementById('runsBox');
+  if (!el) return;
+  if (!runsData.length) { el.innerHTML = '<p class="empty">학습 이력 없음</p>'; return; }
+  el.innerHTML = `
+    <table class="runs-table">
+      <thead><tr>
+        <th>버전</th><th>상태</th><th>Val Acc</th><th>F1</th><th>파일</th><th>시작</th><th>소요</th><th></th>
+      </tr></thead>
+      <tbody>${runsData.map(r => {
+        const acc = r.metrics.valAccuracy != null ? (r.metrics.valAccuracy * 100).toFixed(1) + '%' : '-';
+        const f1  = r.metrics.f1Macro != null ? r.metrics.f1Macro.toFixed(3) : '-';
+        const started = new Date(r.startTime).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const dur = r.duration != null ? `${Math.floor(r.duration / 60)}분 ${r.duration % 60}초` : '-';
+        const statusBadge = r.status === 'FAILED' ? '<span class="badge failed">실패</span>'
+          : r.status === 'RUNNING' ? '<span class="badge">학습 중</span>'
+          : '<span class="badge trained">완료</span>';
+        // 배포 열: 현재 배포 버전이면 배지, 완료된 run이면 배포 버튼(롤백 포함)
+        const action = r.version === deployedVersion ? '<span class="badge deployed">배포됨</span>'
+          : r.status === 'FINISHED' ? `<button class="btn-deploy-row" onclick="deployVersion('${r.version}')">배포</button>`
+          : '';
+        return `<tr>
+          <td><b>${r.version}</b>${r.runId === bestRunId ? ' <span class="badge best">BEST</span>' : ''}</td>
+          <td>${statusBadge}</td>
+          <td>${acc}</td>
+          <td>${f1}</td>
+          <td>${r.params.numFiles ?? '-'}</td>
+          <td style="color:#888">${started}</td>
+          <td style="color:#888">${dur}</td>
+          <td>${action}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+// ── 버전 분포 ──────────────────────────────────────────────────────────
+
+async function loadVersionStats() {
+  const el = document.getElementById('versionStats');
+  try {
+    const { data } = await api('GET', '/model/version-stats');
+    if (!data.stats.length) { el.innerHTML = '<p class="empty">최근 24시간 리포트 없음</p>'; return; }
+    el.innerHTML = data.stats.map(s => `
+      <div class="dist-row">
+        <span class="dist-version">${s.version}</span>
+        <div class="dist-track"><div class="dist-fill ${s.version === data.latestVersion ? 'latest' : ''}" style="width:${Math.round(s.ratio * 100)}%"></div></div>
+        <span class="dist-num">${s.count}건 · ${Math.round(s.ratio * 100)}%</span>
+      </div>`).join('')
+      + `<div class="dist-caption">최근 24시간 폴링 리포트 ${data.totalReports}건 기준 · 초록 = 최신 배포 버전</div>`;
+  } catch(e) { el.innerHTML = `<p class="empty">${e.message}</p>`; }
 }
 </script>
 </body>
