@@ -141,7 +141,7 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
                 raise ValueError("분할 결과 빈 셋 → 폴백")
             train_files = sorted(set(groups[tr_idx]))
             X_val, y_val = X0[val_idx], y0[val_idx]
-            X_te,  y_te  = X0[test_idx], y0[test_idx]
+            X_te, y_te = X0[test_idx], y0[test_idx]
             mlflow.set_tag("split", "group_by_file")
         except ValueError:
             # 윈도우 단위 무작위 분할 (구버전 동작, 오프셋 증강 없음)
@@ -165,8 +165,8 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
             return DataLoader(ds, batch_size=64, shuffle=shuffle)
 
         # 평가셋: train 통계로 정규화, offset=0 고정
-        val_loader  = to_loader(normalize(X_val, mean, std), y_val, False)
-        test_loader = to_loader(normalize(X_te,  mean, std), y_te,  False)
+        val_loader = to_loader(normalize(X_val, mean, std), y_val, False)
+        test_loader = to_loader(normalize(X_te, mean, std), y_te, False)
 
         # 폴백(윈도우 분할)이면 train 고정 — 오프셋 증강은 파일 분할일 때만
         fixed_train_loader = to_loader(normalize(X_tr0, mean, std), y_tr0, True) if train_files is None else None
@@ -302,9 +302,8 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
                 "model_url": model_url,
                 "mlflow_run_id": run_id,
             }
-            import json as _json
             meta_path = os.path.join(out, "meta.json")
-            Path(meta_path).write_text(_json.dumps(meta, indent=2))
+            Path(meta_path).write_text(json.dumps(meta, indent=2))
             upload_model_artifact(platform, version, meta_path, "meta.json")
             mlflow.log_artifact(meta_path)
 

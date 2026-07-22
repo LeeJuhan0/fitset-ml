@@ -6,13 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.deps import validate_platform      # 경로 {platform} 검증(ios/android)
 from app.core.config import CLASSES         # 에러 메시지용 허용 목록
+from app.core.schemas import Envelope
 from app.data import domain, service
-from app.data.schemas import UploadConfirmRequest
+from app.data.schemas import ListDataData, PresignedUrlData, UploadConfirmData, UploadConfirmRequest
 
 router = APIRouter()
 
 
-@router.get("/api/v1/{platform}/data")
+@router.get("/api/v1/{platform}/data", response_model=Envelope[ListDataData])
 def list_data(platform: str = Depends(validate_platform)):
     return {
         "success": True,
@@ -22,7 +23,7 @@ def list_data(platform: str = Depends(validate_platform)):
     }
 
 
-@router.get("/api/v1/{platform}/data/presigned-url")
+@router.get("/api/v1/{platform}/data/presigned-url", response_model=Envelope[PresignedUrlData])
 def presigned_url(
     class_name: str = Query(..., alias="class"),     # 쿼리 ?class= (파이썬 예약어라 alias 사용). 종목 라벨
     device_id: str = Query(..., alias="deviceId"),   # 쿼리 ?deviceId= . 기기 식별자
@@ -42,7 +43,7 @@ def presigned_url(
     }
 
 
-@router.post("/api/v1/{platform}/data/upload-confirm")
+@router.post("/api/v1/{platform}/data/upload-confirm", response_model=Envelope[UploadConfirmData])
 def upload_confirm(body: UploadConfirmRequest, platform: str = Depends(validate_platform)):
     if not domain.is_supported_class(body.class_name):
         raise HTTPException(status_code=400, detail=f"지원하지 않는 종목: {body.class_name}")

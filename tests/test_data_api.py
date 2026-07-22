@@ -4,7 +4,18 @@ import app.data.service as data_mod
 
 
 def test_list_data_wraps_index(client, monkeypatch):
-    index = {"platform": "ios", "files": [{"filename": "a.csv", "class": "SQUAT"}]}
+    # reserve_upload가 기록하는 실제 항목 형태 그대로 (response_model 검증 대상)
+    index = {
+        "platform": "ios",
+        "files": [{
+            "filename": "a.csv",
+            "class": "SQUAT",
+            "deviceId": "watch01",
+            "collectedAt": "2026-07-22T00:00:00+00:00",
+            "uploaded": True,
+            "trainedInVersion": None,
+        }],
+    }
     monkeypatch.setattr(data_mod, "get_index", lambda p: index)
 
     resp = client.get("/api/v1/ios/data")

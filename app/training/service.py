@@ -6,6 +6,8 @@
 import subprocess   # 워커를 별도 프로세스로 실행
 import sys          # 현재 파이썬 실행파일 경로(sys.executable)
 import json         # files 리스트를 인자로 넘기려 JSON 직렬화
+import tempfile     # 워커 로그 파일을 둘 임시 디렉토리
+import pathlib      # 로그 파일 경로 조립
 
 import mlflow
 from fastapi import HTTPException
@@ -44,7 +46,6 @@ def start_training(platform: str, files: list[str], epochs: int, lr: float) -> d
     run = client.create_run(experiment_id=exp_id, run_name=version)   # RUNNING 상태 run 생성
     run_id = run.info.run_id                                # 이 run_id가 곧 jobId
 
-    import tempfile, pathlib
     # 워커의 stdout/stderr를 받아둘 로그 파일(임시 디렉토리)
     log_path = pathlib.Path(tempfile.gettempdir()) / f"trainer_{platform}_{version}.log"
     log_file = open(log_path, "w")
@@ -121,28 +122,28 @@ def list_runs(platform: str) -> dict:
     for r in raw:                       # 각 run을 화면용 dict로 가공
         p = r.data.params               # 학습 파라미터(문자열로 저장됨)
         m = r.data.metrics              # 메트릭(float)
-        start_ms = r.info.start_time     # 시작 시각(ms epoch)
-        end_ms   = r.info.end_time       # 종료 시각(없으면 None)
+        start_ms = r.info.start_time   # 시작 시각(ms epoch)
+        end_ms = r.info.end_time       # 종료 시각(없으면 None)
         duration = round((end_ms - start_ms) / 1000) if end_ms else None   # 소요(초)
 
         runs.append({
-            "runId":        r.info.run_id,
-            "version":      r.info.run_name,
-            "status":       r.info.status,
-            "startTime":    start_ms,
-            "duration":     duration,
-            "params": {     # 문자열로 저장된 파라미터를 숫자로 복원
-                "epochs":     int(p["epochs"])     if "epochs"     in p else None,
-                "lr":         float(p["lr"])        if "lr"         in p else None,
-                "numFiles":   len(json.loads(p["files"])) if "files" in p else None,  # files JSON 길이
+            "runId": r.info.run_id,
+            "version": r.info.run_name,
+            "status": r.info.status,
+            "startTime": start_ms,
+            "duration": duration,
+            "params": {   # 문자열로 저장된 파라미터를 숫자로 복원
+                "epochs": int(p["epochs"]) if "epochs" in p else None,
+                "lr": float(p["lr"]) if "lr" in p else None,
+                "numFiles": len(json.loads(p["files"])) if "files" in p else None,   # files JSON 길이
             },
             "metrics": {
-                "trainLoss":   m.get("train_loss"),
-                "valLoss":     m.get("val_loss"),
+                "trainLoss": m.get("train_loss"),
+                "valLoss": m.get("val_loss"),
                 "valAccuracy": m.get("val_accuracy"),
-                "testAccuracy":m.get("test_accuracy"),
-                "f1Macro":     m.get("f1_macro"),
-                "epoch":       int(m.get("epoch", 0)),
+                "testAccuracy": m.get("test_accuracy"),
+                "f1Macro": m.get("f1_macro"),
+                "epoch": int(m.get("epoch", 0)),
             },
         })
 
@@ -157,6 +158,6 @@ def metric_history(run_id: str, metric: str) -> dict:
     # get_metric_history(run_id, key) : 그 메트릭의 step별 기록 전체를 반환.
     history = client.get_metric_history(run_id, metric)
     return {
-        "metric":  metric,
+        "metric": metric,
         "history": [{"step": h.step, "value": h.value} for h in history],   # (step, value) 시계열
     }

@@ -7,6 +7,7 @@ import pandas as pd
 
 WINDOW = 200   # 2초 × 100Hz  — 한 윈도우(=모델 입력 1개)의 샘플 수
 STRIDE = 100   # 1초 stride    — 윈도우를 100샘플씩 밀며 자른다(50% overlap)
+TRIM_SAMPLES = 300   # 3초 × 100Hz — 파일 앞뒤로 버리는 샘플 수(기기 조작·자세 잡기 노이즈 구간)
 CHANNELS = ["ax", "ay", "az", "gx", "gy", "gz"]   # CSV에서 읽을 6개 IMU 열(가속도 xyz + 자이로 xyz)
 
 
@@ -17,6 +18,12 @@ def load_csv(path: str) -> tuple[np.ndarray, np.ndarray]:
     df.columns = df.columns.str.strip()                # 헤더 공백 제거(" ax" → "ax")
     signals = df[CHANNELS].values.astype(np.float32)   # 6개 채널 열만 뽑아 [N,6] float32 배열
     labels = df["label"].values                        # 행별 라벨(문자열 종목명) [N]
+
+    # 앞뒤 3초(TRIM_SAMPLES)를 버림 — 시작·종료 시점의 비운동 노이즈 제거.
+    # 잘라도 윈도우 1개(WINDOW)가 안 나올 만큼 짧은 파일은 자르지 않고 그대로 둔다.
+    if len(signals) - 2 * TRIM_SAMPLES >= WINDOW:
+        signals = signals[TRIM_SAMPLES:-TRIM_SAMPLES]
+        labels = labels[TRIM_SAMPLES:-TRIM_SAMPLES]
     return signals, labels
 
 
