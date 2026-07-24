@@ -20,13 +20,12 @@ import mlflow
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.model_selection import GroupShuffleSplit, train_test_split
 from torch.utils.data import DataLoader, TensorDataset
 
 from app.core.config import CLASSES, settings
 from app.core.s3 import download_csv, get_index, mark_trained, upload_model_artifact
 from app.worker.model_def import FitSetModel
-from app.worker.preprocess import STRIDE, compute_stats, load_csv, normalize, sliding_window
+from app.worker.preprocess import STRIDE, WINDOW, compute_stats, load_csv, normalize, sliding_window
 
 # ─────────────────────────────────────────────────────────────────────────────
 # [이 파일이 하는 일 — 학습 워커]
@@ -42,8 +41,6 @@ from app.worker.preprocess import STRIDE, compute_stats, load_csv, normalize, sl
 #   load_csv           : CSV → (signals[N,6], labels[N])
 #   sliding_window     : 신호를 200샘플(=2초) 윈도우로 잘라 (X[M,200,6], y[M]) 생성
 #   compute_stats      : 채널별 mean·std 산출(정규화 기준값)   normalize: 그 값으로 정규화
-#   GroupShuffleSplit  : (sklearn 클래스) "그룹(=파일) 단위"로 데이터를 나눠 누수를 막는 분할기
-#   train_test_split   : (sklearn 함수) 단순 무작위 분할(파일 수가 적을 때 폴백용)
 #   TensorDataset      : (torch 클래스) (X, y) 텐서를 한 묶음(샘플=윈도우)으로 감싸는 데이터셋
 #   DataLoader         : (torch 클래스) 데이터셋을 배치 단위로 꺼내주고 셔플하는 반복자
 #   mlflow             : 학습 추적 라이브러리 (run/params/metrics/artifact 기록)
@@ -98,63 +95,52 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
                 download_csv(platform, class_name, filename, local)   # S3 → 임시파일
                 per_file[filename] = load_csv(local)                  # CSV → (signals, labels)
 
-        def window_files(file_list, offset=0):
-            """주어진 파일들을 윈도우로 잘라 (X[M,200,6], y[M], groups[M]) 반환.
-            groups = 각 윈도우의 출신 filename — 파일 단위 분할·누수 차단용."""
-            xs, ys, gs = [], [], []
-            for fn in file_list:
-                signals, labels = per_file[fn]
+        def window_segments(segments: dict, offset=0):
+            """구간 모음 {filename: (signals, labels)} 을 윈도우로 잘라 (X[M,200,6], y[M]) 반환."""
+            xs, ys = [], []
+            for signals, labels in segments.values():
                 w, yy = sliding_window(signals, labels, CLASSES, offset=offset)
                 if len(w):
                     xs.append(w)
                     ys.append(yy)
-                    gs.append(np.array([fn] * len(w)))
             if not xs:
-                return (np.empty((0, 200, 6), np.float32),
-                        np.empty((0,), np.int64),
-                        np.empty((0,), object))
-            return np.concatenate(xs), np.concatenate(ys), np.concatenate(gs)
+                return np.empty((0, 200, 6), np.float32), np.empty((0,), np.int64)
+            return np.concatenate(xs), np.concatenate(ys)
 
-        # 기준 윈도우(offset=0) — 분할·통계·평가셋의 기준
-        X0, y0, groups = window_files(files, offset=0)
+        # ── 2. 분할 — 각 파일을 시간순으로 잘라 train / val 10% / test 10% ──
+        # 이전의 파일 단위 무작위 분할(GroupShuffleSplit)은 종목당 파일이 적으면 특정
+        # 종목이 val/test에서 통째로 빠질 수 있었다 → 모든 파일이 뒤쪽 10%+10%를
+        # val/test에 내놓도록 파일 "안에서" 시간순으로 자른다. 모든 종목이 평가셋에
+        # 포함되고, 학습을 안 한 종목을 평가하는 일도 없다.
+        #   · 구간별로 따로 윈도잉하므로 경계를 걸치는 윈도우가 없고, 겹치는 이웃
+        #     윈도우가 train/평가셋에 흩어지는 누수도 그대로 차단된다.
+        #   · 10%가 윈도우 1개(2초)보다 짧은 파일은 val·test에 최소 2초씩 확보하고,
+        #     그마저 안 나오는 초단편 파일은 train 전용으로 돌린다.
+        #   · val/test가 각 파일의 마지막 구간이므로 "세트 후반(지친 상태) 동작"을
+        #     평가하는 셈 — 시계열에서 미래 구간 평가는 표준적인 관행이다.
+        EVAL_FRAC = 0.1   # val·test 각각의 비율(나머지 ≈80%가 train)
 
-        # ── 2. 분할 — 파일(recording) 단위 GroupShuffleSplit ───────────
-        # 같은 파일의 겹치는 윈도우가 train/test에 흩어지면 누수 → 정확도 과대평가.
-        # 파일이 적으면(MVP) 윈도우 단위 무작위 분할로 폴백한다.
-        #
-        # [GroupShuffleSplit 클래스(sklearn)란]
-        #   train_test_split과 달리 "그룹 id"를 받아, 같은 그룹은 통째로 한쪽(train 또는 test)에만
-        #   가도록 보장하는 분할기. 여기선 groups=윈도우의 출신 파일명 → "한 파일의 윈도우들은
-        #   절대 train과 test로 쪼개지지 않는다". 그래서 옆 윈도우끼리 겹쳐 생기는 정보 누수를 차단.
-        #   .split(X, y, groups) 가 (train_idx, test_idx) 인덱스 쌍을 yield → next()로 1개만 꺼냄.
-        #   여기선 두 번 적용: 먼저 70/30(train / tmp), 다시 tmp를 50/50(val / test)로.
-        train_files = None  # None이면 폴백(오프셋 증강 없음)
-        try:
-            if len(set(groups)) < 4:
-                raise ValueError("그룹(파일) 수 부족 → 폴백")
-            g1 = GroupShuffleSplit(n_splits=1, test_size=0.3, random_state=42)
-            tr_idx, tmp_idx = next(g1.split(X0, y0, groups))
-            g2 = GroupShuffleSplit(n_splits=1, test_size=0.5, random_state=42)
-            v_rel, te_rel = next(g2.split(X0[tmp_idx], y0[tmp_idx], groups[tmp_idx]))
-            val_idx, test_idx = tmp_idx[v_rel], tmp_idx[te_rel]
-            if not (len(tr_idx) and len(val_idx) and len(test_idx)):
-                raise ValueError("분할 결과 빈 셋 → 폴백")
-            train_files = sorted(set(groups[tr_idx]))
-            X_val, y_val = X0[val_idx], y0[val_idx]
-            X_te, y_te = X0[test_idx], y0[test_idx]
-            mlflow.set_tag("split", "group_by_file")
-        except ValueError:
-            # 윈도우 단위 무작위 분할 (구버전 동작, 오프셋 증강 없음)
-            try:
-                X_tr0, X_tmp, y_tr0, y_tmp = train_test_split(X0, y0, test_size=0.3, stratify=y0, random_state=42)
-                X_val, X_te, y_val, y_te = train_test_split(X_tmp, y_tmp, test_size=0.5, stratify=y_tmp, random_state=42)
-            except ValueError:
-                X_tr0, X_tmp, y_tr0, y_tmp = train_test_split(X0, y0, test_size=0.3, random_state=42)
-                X_val, X_te, y_val, y_te = train_test_split(X_tmp, y_tmp, test_size=0.5, random_state=42)
-            mlflow.set_tag("split", "window_fallback")
+        train_seg, val_seg, test_seg = {}, {}, {}
+        for fn, (signals, labels) in per_file.items():
+            n = len(signals)
+            eval_len = max(int(n * EVAL_FRAC), WINDOW)   # val·test 각각의 샘플 수
+            if n - 2 * eval_len < WINDOW:                # train 윈도우가 1개도 안 남으면
+                train_seg[fn] = (signals, labels)        # train 전용(평가 기여 없음)
+                continue
+            a, b = n - 2 * eval_len, n - eval_len
+            train_seg[fn] = (signals[:a], labels[:a])
+            val_seg[fn] = (signals[a:b], labels[a:b])
+            test_seg[fn] = (signals[b:], labels[b:])
 
-        # ── 3. 정규화 통계 — train에서만 산출 (통계 누수 차단) ──────────
-        X_train_base = window_files(train_files, offset=0)[0] if train_files is not None else X_tr0
+        X_val, y_val = window_segments(val_seg)
+        X_te, y_te = window_segments(test_seg)
+        if not len(X_val) or not len(X_te):
+            raise ValueError("val/test 윈도우가 없습니다 — 선택한 파일들이 전부 너무 짧습니다")
+        mlflow.set_tag("split", "per_file_time_80_10_10")
+        mlflow.log_param("num_files_eval", len(val_seg))   # 평가에 실제 기여한 파일 수
+
+        # ── 3. 정규화 통계 — train 구간에서만 산출 (통계 누수 차단) ──────
+        X_train_base, _ = window_segments(train_seg)
         mean, std = compute_stats(X_train_base)
 
         def to_loader(X, y, shuffle):
@@ -168,16 +154,10 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
         val_loader = to_loader(normalize(X_val, mean, std), y_val, False)
         test_loader = to_loader(normalize(X_te, mean, std), y_te, False)
 
-        # 폴백(윈도우 분할)이면 train 고정 — 오프셋 증강은 파일 분할일 때만
-        fixed_train_loader = to_loader(normalize(X_tr0, mean, std), y_tr0, True) if train_files is None else None
-
         def epoch_train_loader():
-            """파일 분할이면 매 에폭 랜덤 오프셋으로 재윈도잉(위상 증강),
-            폴백이면 고정 로더 반환."""
-            if fixed_train_loader is not None:
-                return fixed_train_loader
+            """매 에폭 랜덤 오프셋으로 train 구간을 재윈도잉(위상 증강)."""
             off = random.randrange(STRIDE)            # [0, 100) — 위상 무작위
-            Xa, ya, _ = window_files(train_files, offset=off)
+            Xa, ya = window_segments(train_seg, offset=off)
             return to_loader(normalize(Xa, mean, std), ya, True)
 
         # ── 2. 학습 ─────────────────────────────────────────────────────
@@ -193,9 +173,9 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
         #   forward에서 permute로 [B,200,6]↔[B,6,200] 축을 Conv1d/LSTM 입력 규격에 맞춰 바꿈.
         #   (별도 WrappedModel은 여기서 안 씀 — 변환 단계 convert.py에서 정규화+softmax 입혀 export)
 
-        # 에폭 반복: 매 에폭마다 train 1회 + val 1회. 파일 분할이면 train 로더를 매번 새로(랜덤 오프셋) 만든다.
+        # 에폭 반복: 매 에폭마다 train 1회 + val 1회. train 로더는 매번 새로(랜덤 오프셋) 만든다.
         for epoch in range(1, epochs + 1):
-            train_loader = epoch_train_loader()   # 파일 분할이면 매 에폭 랜덤 오프셋 재윈도잉
+            train_loader = epoch_train_loader()   # 매 에폭 랜덤 오프셋 재윈도잉
             model.train()                          # 학습 모드(Dropout·BatchNorm 활성)
             train_loss = 0.0
             for xb, yb in train_loader:            # 미니배치 반복
