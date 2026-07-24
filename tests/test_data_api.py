@@ -100,3 +100,63 @@ def test_upload_confirm_rejects_unknown_class(client):
         json={"filename": "x.csv", "class_name": "PLANK"},
     )
     assert resp.status_code == 400
+
+
+# ── GET /data/stats ──────────────────────────────────────────────────────────
+
+def _stats_csv(rows_sec: int = 10, hz: int = 100) -> bytes:
+    """hz 샘플/초 × rows_sec 초짜리 CSV. 앞 3초는 ax=99(노이즈), 이후는 ax=1."""
+    lines = ["timestamp,ax,ay,az,gx,gy,gz,label"]
+    for i in range(rows_sec * hz):
+        t_ns = i * (1_000_000_000 // hz)
+        ax = 99.0 if i < 3 * hz else 1.0
+        lines.append(f"{t_ns},{ax},0.5,-9.8,0.1,-0.1,0.0,SQUAT")
+    return "\n".join(lines).encode()
+
+
+def test_data_stats_trims_edges(client, monkeypatch):
+    index = {"platform": "ios", "files": [
+        {"filename": "SQUAT_ABC_0001.csv", "class": "SQUAT", "uploaded": True},
+    ]}
+    monkeypatch.setattr(data_mod, "get_index", lambda p: index)
+    monkeypatch.setattr(
+        data_mod, "download_csv_bytes",
+        lambda platform, class_name, filename: _stats_csv(),
+    )
+
+    resp = client.get("/api/v1/ios/data/stats?filename=SQUAT_ABC_0001.csv")
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["class"] == "SQUAT"
+    assert data["trimApplied"] is True
+    assert data["totalRows"] == 1000
+    assert data["usedRows"] < 1000
+    ax = next(c for c in data["channels"] if c["channel"] == "ax")
+    # 앞 3초의 ax=99 노이즈가 트림으로 빠졌으면 평균은 정확히 1
+    assert ax["mean"] == 1.0
+    assert ax["max"] == 1.0
+    assert {c["channel"] for c in data["channels"]} == {"ax", "ay", "az", "gx", "gy", "gz"}
+
+
+def test_data_stats_short_file_skips_trim(client, monkeypatch):
+    # 총 5초 → 앞뒤 3초 트림하면 빈 구간 → 전체로 계산하고 trimApplied=False
+    index = {"platform": "ios", "files": [
+        {"filename": "SQUAT_ABC_0002.csv", "class": "SQUAT", "uploaded": True},
+    ]}
+    monkeypatch.setattr(data_mod, "get_index", lambda p: index)
+    monkeypatch.setattr(
+        data_mod, "download_csv_bytes",
+        lambda platform, class_name, filename: _stats_csv(rows_sec=5),
+    )
+
+    resp = client.get("/api/v1/ios/data/stats?filename=SQUAT_ABC_0002.csv")
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["trimApplied"] is False
+    assert data["usedRows"] == data["totalRows"] == 500
+
+
+def test_data_stats_404_unknown_file(client, monkeypatch):
+    monkeypatch.setattr(data_mod, "get_index", lambda p: {"platform": "ios", "files": []})
+    resp = client.get("/api/v1/ios/data/stats?filename=NOPE.csv")
+    assert resp.status_code == 404

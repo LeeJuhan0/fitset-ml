@@ -228,7 +228,7 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
         # ── 3. 평가 ─────────────────────────────────────────────────────
         # 학습에 한 번도 안 쓴 test 셋으로 최종 성능 측정. f1_score(average="macro")는
         # 종목별 F1을 평균 → 클래스 불균형에서도 소수 종목 성능을 공정히 반영한다.
-        from sklearn.metrics import f1_score
+        from sklearn.metrics import classification_report, confusion_matrix, f1_score
 
         model.eval()
         all_preds, all_true = [], []   # 전체 예측/정답을 모아 f1 계산
@@ -244,10 +244,33 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
         test_acc = test_correct / len(test_loader.dataset)
         f1 = f1_score(all_true, all_preds, average="macro")
 
+        # 클래스별 F1 — average=None이면 클래스마다 F1 배열이 나온다.
+        # labels를 명시해 test 셋에 없는 종목도 CLASSES 인덱스와 어긋나지 않게 정렬(없는 종목은 0).
+        label_ids = list(range(len(CLASSES)))
+        per_class_f1 = f1_score(all_true, all_preds, average=None, labels=label_ids, zero_division=0)
+
         mlflow.log_metrics({
             "test_accuracy": round(test_acc, 4),
             "f1_macro": round(f1, 4),
+            **{f"f1_{CLASSES[i]}": round(float(v), 4) for i, v in enumerate(per_class_f1)},
         })
+
+        # 클래스별 precision/recall까지 포함한 상세 리포트와 혼동 행렬은 run 아티팩트로 남긴다
+        mlflow.log_dict(
+            classification_report(
+                all_true, all_preds,
+                labels=label_ids, target_names=CLASSES,
+                output_dict=True, zero_division=0,
+            ),
+            "classification_report.json",
+        )
+        mlflow.log_dict(
+            {
+                "labels": CLASSES,   # matrix[i][j] = 실제 labels[i]를 labels[j]로 예측한 윈도우 수
+                "matrix": confusion_matrix(all_true, all_preds, labels=label_ids).tolist(),
+            },
+            "confusion_matrix.json",
+        )
 
         # ── 4. 모델 저장 & 변환 & S3 업로드 ─────────────────────────────
         model.cpu()   # 변환·저장은 CPU 텐서 기준

@@ -27,6 +27,27 @@ class ListDataData(CamelModel):
     files: list[FileEntry]
 
 
+class ChannelStats(CamelModel):
+    # 센서 채널 하나(ax~gz)의 요약 통계
+    channel: str
+    mean: float
+    min: float
+    max: float
+    std: float
+
+
+class FileStatsData(CamelModel):
+    # GET /data/stats 응답 data — 앞뒤 trim_seconds 초를 제외한 채널별 통계
+    filename: str
+    class_name: str = Field(alias="class")
+    trim_seconds: float           # 앞뒤로 잘라낸 구간(초)
+    trim_applied: bool            # 파일이 너무 짧아 트림을 못 했으면 False(전체 구간 통계)
+    duration_seconds: float
+    total_rows: int
+    used_rows: int                # 통계에 실제 사용된 샘플 수
+    channels: list[ChannelStats]
+
+
 class PresignedUrlData(CamelModel):
     # GET /data/presigned-url 응답 data
     presigned_url: str          # 앱이 이 URL로 CSV를 직접 PUT

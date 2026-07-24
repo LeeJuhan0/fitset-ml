@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # data 도메인 API(controller) — 형식 검증·응답 포장만 하고 유스케이스는 service에 위임.
-# 엔드포인트: GET /data, GET /data/presigned-url, POST /data/upload-confirm
+# 엔드포인트: GET /data, GET /data/stats, GET /data/presigned-url, POST /data/upload-confirm
 # ─────────────────────────────────────────────────────────────────────────────
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -8,7 +8,13 @@ from app.deps import validate_platform      # 경로 {platform} 검증(ios/andro
 from app.core.config import CLASSES         # 에러 메시지용 허용 목록
 from app.core.schemas import Envelope
 from app.data import domain, service
-from app.data.schemas import ListDataData, PresignedUrlData, UploadConfirmData, UploadConfirmRequest
+from app.data.schemas import (
+    FileStatsData,
+    ListDataData,
+    PresignedUrlData,
+    UploadConfirmData,
+    UploadConfirmRequest,
+)
 
 router = APIRouter()
 
@@ -20,6 +26,23 @@ def list_data(platform: str = Depends(validate_platform)):
         "code": "200",
         "message": "파일 목록을 조회했습니다.",
         "data": service.list_data(platform),
+    }
+
+
+@router.get("/api/v1/{platform}/data/stats", response_model=Envelope[FileStatsData])
+def data_stats(
+    filename: str = Query(...),   # 쿼리 ?filename= . 인덱스에 등록된 CSV 파일명
+    platform: str = Depends(validate_platform),
+):
+    stats = service.file_stats(platform, filename)
+    if stats is None:
+        raise HTTPException(status_code=404, detail=f"파일을 찾을 수 없습니다: {filename}")
+
+    return {
+        "success": True,
+        "code": "200",
+        "message": "파일 통계를 조회했습니다.",
+        "data": stats,
     }
 
 

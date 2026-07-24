@@ -33,7 +33,7 @@ def test_train_400_on_unknown_file(client, monkeypatch):
     monkeypatch.setattr(train_mod, "get_index", lambda p: {"files": [{"filename": "a.csv"}]})
     resp = client.post("/api/v1/ios/train", json={"files": ["a.csv", "ghost.csv"]})
     assert resp.status_code == 400
-    assert "ghost.csv" in resp.json()["detail"]
+    assert "ghost.csv" in resp.json()["message"]
 
 
 def test_train_409_when_already_running(client):

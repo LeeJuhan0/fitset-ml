@@ -58,6 +58,15 @@ def mark_uploaded(platform: str, filename: str) -> bool:
     return result["found"]
 
 
+def download_csv_bytes(platform: str, class_name: str, filename: str) -> bytes:
+    # 통계 조회용 — CSV 객체 본문을 통째로 읽어 반환(임시파일 없이 메모리로).
+    obj = s3._client().get_object(
+        Bucket=s3.settings.raw_data_bucket,
+        Key=s3._csv_key(platform, class_name, filename),
+    )
+    return obj["Body"].read()
+
+
 def csv_key(platform: str, class_name: str, filename: str) -> str:
     # 업로드될 최종 S3 키 — 키 조립 규칙은 core가 정본
     return s3._csv_key(platform, class_name, filename)

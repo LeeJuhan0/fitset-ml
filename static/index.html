@@ -6,113 +6,324 @@
   <title>FitSet ML Dashboard</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f0f0f; color: #e8e8e8; min-height: 100vh; }
+    :root {
+      --bg: #F5F4EF;            /* 크림 배경 (관리자 레이아웃 스펙) */
+      --card: #ffffff;
+      --line: #ECEAE2;
+      --orange: #F0A93E;        /* 포인트 컬러 */
+      --orange-deep: #9A6B1F;   /* 링크·강조 텍스트 */
+      --orange-soft: #FBEED7;   /* 연오렌지 배경 */
+      --blue: #2563EB;          /* 데이터 테이블 카드 프라이머리 (테이블 스펙) */
+      --ink: #1F2328;
+      --gray: #6B7280;
+      --gray-light: #9CA3AF;
+      --tline: #E5E7EB;         /* 테이블 구분선 */
+      --green: #16A34A;
+      --red: #DC2626;
+    }
+    body {
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg); color: var(--ink); min-height: 100vh;
+    }
+    button { font-family: inherit; }
 
     /* ── 잠금 화면 ── */
-    #lockScreen {
-      display: flex; align-items: center; justify-content: center;
-      min-height: 100vh;
-    }
+    #lockScreen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
     .lock-card {
-      background: #161616; border: 1px solid #222; border-radius: 14px;
-      padding: 40px 36px; width: 320px; display: flex; flex-direction: column; gap: 20px;
+      background: var(--card); border: 1px solid var(--line); border-radius: 22px;
+      padding: 40px 36px; width: 330px; display: flex; flex-direction: column; gap: 20px;
     }
-    .lock-card h2 { font-size: 18px; font-weight: 700; text-align: center; letter-spacing: -.01em; }
-    .lock-card p { font-size: 12px; color: #555; text-align: center; }
+    .lock-card h2 { font-size: 19px; font-weight: 700; text-align: center; letter-spacing: -.01em; }
+    .lock-card p { font-size: 12px; color: var(--gray-light); text-align: center; }
     .lock-input {
-      padding: 10px 14px; background: #111; border: 1px solid #2a2a2a;
-      border-radius: 8px; color: #e8e8e8; font-size: 14px; outline: none; width: 100%;
+      padding: 11px 14px; background: #fff; border: 1px solid var(--tline);
+      border-radius: 10px; color: var(--ink); font-size: 14px; outline: none; width: 100%;
       transition: border-color .12s;
     }
-    .lock-input:focus { border-color: #2563eb; }
+    .lock-input:focus { border-color: var(--orange); }
     .lock-input.error { border-color: #ef4444; animation: shake .25s; }
-    @keyframes shake {
-      0%,100% { transform: translateX(0); }
-      25%      { transform: translateX(-6px); }
-      75%      { transform: translateX(6px); }
-    }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
     .lock-btn {
-      padding: 10px; border-radius: 8px; border: none; cursor: pointer;
-      background: #2563eb; color: #fff; font-size: 14px; font-weight: 600;
-      transition: background .12s; width: 100%;
+      padding: 11px; border-radius: 10px; border: none; cursor: pointer;
+      background: var(--orange); color: #fff; font-size: 14px; font-weight: 600; width: 100%;
     }
-    .lock-btn:hover { background: #1d4ed8; }
-    .lock-error { font-size: 12px; color: #f87171; text-align: center; min-height: 16px; }
+    .lock-btn:hover { filter: brightness(.96); }
+    .lock-error { font-size: 12px; color: #ef4444; text-align: center; min-height: 16px; }
+
+    /* ── 셸: 사이드바 + 메인 ── */
+    #appView { display: none; }
+    .shell { display: flex; min-height: 100vh; gap: 22px; padding: 22px; max-width: 1560px; margin: 0 auto; }
+
+    /* ── 사이드바 ── */
+    aside {
+      width: 240px; flex-shrink: 0; background: var(--card); border-radius: 22px;
+      display: flex; flex-direction: column; padding: 22px 16px 16px;
+      position: sticky; top: 22px; height: calc(100vh - 44px); transition: width .18s;
+      position: relative;
+    }
+    .shell.collapsed aside { width: 76px; }
+    .shell.collapsed .side-label, .shell.collapsed .side-search, .shell.collapsed .profile-meta,
+    .shell.collapsed .brand-name, .shell.collapsed .nav-chev, .shell.collapsed .role-pill { display: none; }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 18px; }
+    .brand-logo {
+      width: 34px; height: 34px; border-radius: 10px; background: var(--orange);
+      display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0;
+    }
+    .brand-logo svg { width: 18px; height: 18px; }
+    .brand-name { font-size: 17px; font-weight: 800; letter-spacing: -.01em; }
+    .side-search {
+      display: flex; align-items: center; gap: 8px; border: 1px solid var(--tline);
+      border-radius: 999px; padding: 8px 14px; margin: 0 4px 18px; color: var(--gray-light);
+    }
+    .side-search svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .side-search input { border: none; outline: none; font-size: 13px; width: 100%; background: transparent; color: var(--ink); }
+    nav { display: flex; flex-direction: column; gap: 4px; }
+    .nav-item {
+      display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 11px;
+      font-size: 13.5px; font-weight: 500; color: var(--ink); cursor: pointer; border: none;
+      background: transparent; text-align: left; width: 100%; text-decoration: none;
+    }
+    .nav-item:hover { background: var(--bg); }
+    .nav-item.active { background: var(--orange-soft); color: var(--orange-deep); font-weight: 600; }
+    .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--gray); }
+    .nav-item.active svg { color: var(--orange-deep); }
+    .nav-chev { margin-left: auto; color: var(--gray-light) !important; width: 13px !important; height: 13px !important; }
+    .side-bottom { margin-top: auto; border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+    .profile { display: flex; align-items: center; gap: 10px; padding: 8px 12px 12px; }
+    .avatar {
+      width: 34px; height: 34px; border-radius: 50%; background: var(--orange-soft);
+      color: var(--orange-deep); font-weight: 700; font-size: 14px;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .profile-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .profile-meta .name { font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+    .role-pill { font-size: 10.5px; font-weight: 600; background: var(--orange-soft); color: var(--orange-deep); border-radius: 999px; padding: 2px 9px; }
+    .nav-item.logout { color: var(--red); }
+    .nav-item.logout svg { color: var(--red); }
+    .collapse-btn {
+      position: absolute; right: -12px; top: 50%; transform: translateY(-50%);
+      width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--line);
+      background: var(--card); color: var(--gray); cursor: pointer; font-size: 12px; line-height: 1;
+    }
+    .collapse-btn:hover { color: var(--ink); }
 
     /* ── 메인 ── */
-    #appView { display: none; }
-
-    header { padding: 16px 32px; border-bottom: 1px solid #222; display: flex; align-items: center; gap: 16px; }
-    header h1 { font-size: 17px; font-weight: 600; }
-    .platform-tabs { display: flex; gap: 6px; }
-    .platform-tabs button { padding: 5px 14px; border-radius: 6px; border: 1px solid #333; background: transparent; color: #aaa; cursor: pointer; font-size: 13px; }
-    .platform-tabs button.active { background: #2563eb; border-color: #2563eb; color: #fff; }
-    .mlflow-btn { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 7px 16px; border-radius: 7px; border: 1px solid #2a2a2a; background: #161616; color: #60a5fa; font-size: 13px; font-weight: 500; text-decoration: none; transition: border-color .12s; }
-    .mlflow-btn:hover { border-color: #60a5fa; }
+    main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 22px; }
+    .topbar { display: flex; align-items: center; gap: 16px; }
+    .topbar h1 { font-size: 21px; font-weight: 800; letter-spacing: -.02em; margin-right: 4px; }
+    .platform-tabs { display: flex; gap: 4px; background: var(--card); border-radius: 999px; padding: 4px; }
+    .platform-tabs button {
+      padding: 6px 18px; border-radius: 999px; border: none; background: transparent;
+      color: var(--gray); cursor: pointer; font-size: 13px; font-weight: 600;
+    }
+    .platform-tabs button.active { background: var(--orange); color: #fff; }
+    .mlflow-btn {
+      margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 9px 18px;
+      border-radius: 999px; background: var(--card); color: var(--orange-deep);
+      font-size: 13px; font-weight: 600; text-decoration: none;
+    }
+    .mlflow-btn:hover { background: #fffdf8; }
     .mlflow-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
 
-    #mainView { display: grid; grid-template-columns: 1fr 360px; gap: 24px; padding: 24px 32px; max-width: 1400px; }
-    section { background: #161616; border: 1px solid #222; border-radius: 10px; padding: 20px; }
-    section h2 { font-size: 13px; font-weight: 600; color: #777; margin-bottom: 14px; text-transform: uppercase; letter-spacing: .05em; }
-    .file-list { max-height: 500px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
-    .file-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; background: #1a1a1a; border: 1px solid #2a2a2a; cursor: pointer; transition: border-color .12s; }
-    .file-item:hover { border-color: #444; }
-    .file-item.selected { border-color: #2563eb; background: #0f1d3a; }
-    .file-item input[type=checkbox] { accent-color: #2563eb; width: 14px; height: 14px; flex-shrink: 0; }
-    .badge { font-size: 11px; padding: 2px 7px; border-radius: 99px; background: #222; color: #888; white-space: nowrap; }
-    .badge.trained { background: #14532d; color: #4ade80; }
-    .file-name { font-size: 13px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .select-count { font-size: 12px; color: #60a5fa; margin-bottom: 8px; }
-    .list-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-    .class-filter { padding: 6px 10px; background: #111; border: 1px solid #2a2a2a; border-radius: 6px; color: #e8e8e8; font-size: 12px; outline: none; }
-    .class-filter:focus { border-color: #2563eb; }
-    .select-all { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #aaa; cursor: pointer; user-select: none; margin-left: auto; }
-    .select-all input[type=checkbox] { accent-color: #2563eb; width: 14px; height: 14px; }
-    .sidebar { display: flex; flex-direction: column; gap: 14px; }
-    .form-group { display: flex; flex-direction: column; gap: 5px; }
-    .form-group label { font-size: 11px; color: #777; text-transform: uppercase; letter-spacing: .04em; }
-    .form-group input { padding: 8px 11px; background: #111; border: 1px solid #2a2a2a; border-radius: 6px; color: #e8e8e8; font-size: 13px; outline: none; }
-    .form-group input:focus { border-color: #2563eb; }
-    .btn { padding: 9px 14px; border-radius: 7px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity .12s; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+    .card { background: var(--card); border-radius: 22px; padding: 24px; min-width: 0; }
+    .card h2 { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+    .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .orange-link {
+      display: inline-flex; align-items: center; gap: 6px; color: var(--orange-deep);
+      font-size: 13px; font-weight: 600; text-decoration: none; margin-top: auto; cursor: pointer;
+      background: none; border: none; padding: 0;
+    }
+    .orange-link:hover { text-decoration: underline; }
+    .empty { color: #B8B4A8; font-size: 13px; text-align: center; padding: 20px 0; }
+
+    /* ── KPI 카드 ── */
+    .kpi { display: flex; flex-direction: column; gap: 10px; min-height: 210px; }
+    .kpi .big {
+      font-size: 62px; font-weight: 800; letter-spacing: -.03em; line-height: 1.05;
+      display: flex; align-items: baseline; gap: 10px;
+    }
+    .kpi .big .arrow-up { color: var(--green); }
+    .kpi .big .arrow-up svg { width: 26px; height: 26px; }
+    .kpi .sub { font-size: 13px; color: var(--gray); }
+    .kpi.center { align-items: center; text-align: center; }
+    .gauge-wrap { position: relative; width: 190px; margin: 4px auto 0; }
+    .gauge-wrap svg { display: block; width: 100%; }
+    .gauge-num {
+      position: absolute; left: 0; right: 0; bottom: 4px; font-size: 34px; font-weight: 800; letter-spacing: -.02em;
+    }
+    .gauge-status { font-size: 12px; color: var(--gray); min-height: 16px; }
+    .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; margin-top: 8px; }
+    .metric-box { background: var(--bg); border-radius: 12px; padding: 8px 10px; text-align: center; }
+    .metric-box .lbl { font-size: 10px; color: var(--gray-light); text-transform: uppercase; letter-spacing: .04em; }
+    .metric-box .val { font-size: 15px; font-weight: 700; margin-top: 2px; }
+
+    /* ── 데이터 테이블 카드 (테이블 스펙: 회백/블루 계열) ── */
+    .table-card { grid-column: 1 / -1; padding: 24px 24px 16px; }
+    .table-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+    .icon-btn {
+      width: 38px; height: 38px; border-radius: 8px; border: 1px solid var(--tline);
+      background: #fff; color: var(--gray); cursor: pointer;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .icon-btn:hover { border-color: var(--gray-light); color: var(--ink); }
+    .icon-btn svg { width: 15px; height: 15px; }
+    .search-box {
+      display: flex; align-items: center; gap: 9px; border: 1px solid var(--tline);
+      border-radius: 8px; padding: 0 13px; height: 38px; width: 500px; max-width: 45%;
+      color: var(--gray-light); background: #fff;
+    }
+    .search-box svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .search-box input { border: none; outline: none; font-size: 13px; width: 100%; color: var(--ink); background: transparent; }
+    .class-filter {
+      height: 38px; padding: 0 12px; background: #fff; border: 1px solid var(--tline);
+      border-radius: 8px; color: var(--ink); font-size: 13px; outline: none; display: none;
+    }
+    .class-filter.open { display: block; }
+    .select-count { font-size: 12.5px; color: var(--blue); font-weight: 600; margin-left: 4px; }
+    .btn-blue {
+      margin-left: auto; height: 38px; padding: 0 18px; border-radius: 8px; border: none;
+      background: var(--blue); color: #fff; font-size: 13.5px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; gap: 7px;
+    }
+    .btn-blue:hover { background: #1D4ED8; }
+
+    .table-wrap { position: relative; overflow-x: auto; }
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table thead th {
+      font-size: 12px; color: var(--gray); font-weight: 600; text-transform: uppercase;
+      letter-spacing: .05em; text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--tline);
+      white-space: nowrap; user-select: none;
+    }
+    .data-table thead th.sortable { cursor: pointer; }
+    .data-table thead th.sortable:hover { color: var(--ink); }
+    .sort-ic { display: inline-block; margin-left: 4px; color: var(--gray-light); font-size: 10px; }
+    th.sorted .sort-ic { color: var(--blue); }
+    .data-table tbody td { padding: 20px 12px; border-bottom: 1px solid var(--tline); vertical-align: middle; }
+    .data-table tbody tr { transition: background .1s; cursor: pointer; }
+    .data-table tbody tr:hover { background: #F9FAFB; }
+    .data-table tbody tr.selected { background: #EFF6FF; }
+    .data-table input[type=checkbox] {
+      appearance: none; width: 18px; height: 18px; border: 1.5px solid #D1D5DB; border-radius: 50%;
+      cursor: pointer; position: relative; vertical-align: middle; background: #fff; flex-shrink: 0;
+    }
+    .data-table input[type=checkbox]:checked { background: var(--blue); border-color: var(--blue); }
+    .data-table input[type=checkbox]:checked::after {
+      content: ""; position: absolute; left: 5.5px; top: 2.5px; width: 4px; height: 8px;
+      border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
+    }
+    .row-num { color: var(--gray-light); font-size: 13px; }
+    .cell-name .nm { font-weight: 600; font-size: 14px; color: var(--ink); }
+    .cell-name .id { font-size: 12px; color: var(--gray-light); margin-top: 3px; }
+    .cell-desc { color: var(--gray); font-size: 13px; max-width: 260px;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 5px 12px; white-space: nowrap; }
+    .pill.class  { background: #EDE9FE; color: #7C3AED; }   /* 종목: 연보라/보라 */
+    .pill.trained{ background: #DCFCE7; color: #15803D; }   /* 학습됨: 연녹/녹 */
+    .pill.idle   { background: #F3F4F6; color: #6B7280; }   /* 미학습: 연회/회 */
+    .pill.pending{ background: #FCE7F3; color: #DC2626; }   /* 업로드 대기: 연분홍/빨강 */
+    .cell-right { text-align: right; }
+    .cell-right .v { font-size: 14px; font-weight: 500; }
+    .cell-right .u { font-size: 11.5px; color: var(--gray-light); margin-top: 3px; }
+    .stats-btn {
+      width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--tline);
+      background: #fff; color: var(--gray); cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .stats-btn:hover { border-color: var(--blue); color: var(--blue); }
+    .stats-btn svg { width: 13px; height: 13px; }
+    .table-fade {
+      position: absolute; left: 0; right: 0; bottom: 0; height: 64px; pointer-events: none;
+      background: linear-gradient(to bottom, rgba(255,255,255,0), #fff); display: none;
+    }
+    .table-fade.visible { display: block; }
+
+    /* 페이지네이션 바 */
+    .pagi { display: flex; align-items: center; gap: 14px; padding: 14px 4px 4px; font-size: 13px; color: var(--gray); }
+    .pagi .range { margin-right: auto; }
+    .pagi select {
+      border: 1px solid var(--tline); border-radius: 8px; padding: 6px 8px; font-size: 13px;
+      color: var(--ink); background: #fff; outline: none;
+    }
+    .pagi .pg-btn {
+      width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--tline); background: #fff;
+      color: var(--gray); cursor: pointer; font-size: 14px;
+    }
+    .pagi .pg-btn:hover:not(:disabled) { border-color: var(--gray-light); color: var(--ink); }
+    .pagi .pg-btn:disabled { opacity: .35; cursor: default; }
+
+    /* ── 학습 이력 ── */
+    .runs-card { grid-column: 1 / 3; }
+    .runs-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .runs-table th {
+      text-align: left; color: var(--gray); font-weight: 600; padding: 9px 10px;
+      border-bottom: 1px solid var(--tline); text-transform: uppercase; font-size: 11px; letter-spacing: .05em;
+    }
+    .runs-table td { padding: 12px 10px; border-bottom: 1px solid #F3F2EC; white-space: nowrap; }
+    .runs-table tr:hover td { background: #FCFBF7; }
+    .btn-deploy-row {
+      padding: 4px 12px; font-size: 12px; border-radius: 999px; border: 1px solid var(--orange);
+      background: transparent; color: var(--orange-deep); cursor: pointer; font-weight: 600;
+    }
+    .btn-deploy-row:hover { background: var(--orange-soft); }
+    .pill.deployed { background: var(--orange-soft); color: var(--orange-deep); }
+    .pill.best { background: #FEF3C7; color: #B45309; }
+    .pill.failed { background: #FEE2E2; color: #DC2626; }
+
+    /* ── 우측 스택: 학습 설정 / 배포된 모델 ── */
+    .side-stack { display: flex; flex-direction: column; gap: 22px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group label { font-size: 11px; color: var(--gray); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+    .form-group input {
+      padding: 10px 12px; background: #fff; border: 1px solid var(--tline); border-radius: 10px;
+      color: var(--ink); font-size: 13.5px; outline: none;
+    }
+    .form-group input:focus { border-color: var(--orange); }
+    .btn {
+      padding: 10px 16px; border-radius: 10px; border: none; cursor: pointer;
+      font-size: 13.5px; font-weight: 600; transition: opacity .12s;
+    }
     .btn:disabled { opacity: .35; cursor: default; }
-    .btn-primary { background: #2563eb; color: #fff; }
-    .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
-    .btn-secondary { background: #1a1a1a; border: 1px solid #333; color: #ccc; }
-    .btn-secondary:hover:not(:disabled) { border-color: #555; }
-    .btn-success { background: #14532d; color: #4ade80; border: 1px solid #166534; }
-    .btn-success:hover:not(:disabled) { background: #166534; }
-    .progress-box { display: none; background: #0a0a0a; border: 1px solid #222; border-radius: 8px; padding: 14px; }
-    .progress-box.visible { display: block; }
-    .progress-label { font-size: 12px; color: #888; margin-bottom: 8px; }
-    .progress-bar-track { background: #1a1a1a; border-radius: 99px; height: 5px; }
-    .progress-bar-fill { background: #2563eb; border-radius: 99px; height: 5px; transition: width .4s; }
-    .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
-    .metric-box { background: #111; border-radius: 6px; padding: 8px 10px; }
-    .metric-box .lbl { font-size: 10px; color: #555; text-transform: uppercase; }
-    .metric-box .val { font-size: 16px; font-weight: 700; color: #e8e8e8; margin-top: 1px; }
-    .run-link { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #60a5fa; text-decoration: none; margin-top: 10px; padding: 7px 10px; border-radius: 6px; border: 1px solid #1e3a5f; background: #0a1a2e; }
-    .run-link:hover { border-color: #60a5fa; }
-    .empty { color: #3a3a3a; font-size: 13px; text-align: center; padding: 20px 0; }
+    .btn-primary { background: var(--orange); color: #fff; }
+    .btn-primary:hover:not(:disabled) { filter: brightness(.96); }
+    .btn-secondary { background: #fff; border: 1px solid var(--tline); color: var(--gray); }
+    .btn-secondary:hover:not(:disabled) { border-color: var(--gray-light); color: var(--ink); }
+    .deployed-version { font-size: 34px; font-weight: 800; color: var(--orange-deep); letter-spacing: -.02em; }
+    .deployed-url { font-size: 11px; color: var(--gray-light); word-break: break-all; margin-top: 6px; }
 
-    /* ── 학습 이력 테이블 ── */
-    .runs-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .runs-table th { text-align: left; color: #555; font-weight: 500; padding: 6px 8px; border-bottom: 1px solid #222; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; }
-    .runs-table td { padding: 7px 8px; border-bottom: 1px solid #1c1c1c; white-space: nowrap; }
-    .runs-table tr:hover td { background: #1a1a1a; }
-    .badge.deployed { background: #1e3a5f; color: #60a5fa; }
-    .badge.best { background: #422006; color: #fbbf24; }
-    .badge.failed { background: #450a0a; color: #f87171; }
-    .btn-deploy-row { padding: 3px 10px; font-size: 11px; border-radius: 5px; border: 1px solid #166534; background: transparent; color: #4ade80; cursor: pointer; }
-    .btn-deploy-row:hover { background: #14532d; }
+    /* ── 버전 분포: 오렌지 그라데이션 가로 막대 랭킹 ── */
+    .version-card { grid-column: 1 / -1; }
+    .dist-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .dist-bar {
+      height: 34px; border-radius: 9px; background: linear-gradient(90deg, #F0A93E, #F7CE85);
+      display: flex; align-items: center; padding: 0 12px; min-width: 64px;
+      color: #6b4a12; font-weight: 700; font-size: 12.5px; white-space: nowrap;
+    }
+    .dist-bar.latest { background: linear-gradient(90deg, #E08F13, #F0A93E); color: #fff; }
+    .dist-num { color: var(--gray); font-size: 12.5px; white-space: nowrap; }
+    .dist-caption { font-size: 12px; color: var(--gray-light); margin-top: 12px; }
 
-    /* ── 버전 분포 ── */
-    .dist-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 7px; }
-    .dist-version { width: 44px; font-weight: 600; flex-shrink: 0; }
-    .dist-track { flex: 1; background: #1a1a1a; border-radius: 99px; height: 6px; }
-    .dist-fill { background: #2563eb; border-radius: 99px; height: 6px; }
-    .dist-fill.latest { background: #4ade80; }
-    .dist-num { width: 78px; text-align: right; color: #888; font-size: 11px; flex-shrink: 0; }
-    .dist-caption { font-size: 11px; color: #555; margin-top: 10px; }
+    /* ── 파일 통계 모달 ── */
+    .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(31,35,40,.4); z-index: 50; align-items: center; justify-content: center; }
+    .modal-backdrop.visible { display: flex; }
+    .modal {
+      background: var(--card); border-radius: 20px; width: 500px; max-width: calc(100vw - 40px);
+      max-height: calc(100vh - 80px); overflow-y: auto; padding: 26px;
+    }
+    .modal-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 4px; }
+    .modal-head h3 { font-size: 15px; font-weight: 700; word-break: break-all; flex: 1; }
+    .modal-close { background: none; border: none; color: var(--gray-light); font-size: 18px; cursor: pointer; line-height: 1; padding: 2px; }
+    .modal-close:hover { color: var(--ink); }
+    .modal-sub { font-size: 12px; color: var(--gray); margin-bottom: 16px; }
+    .modal-sub .warn { color: #B45309; }
+    .stats-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .stats-table th {
+      text-align: right; color: var(--gray); font-weight: 600; padding: 8px; border-bottom: 1px solid var(--tline);
+      text-transform: uppercase; font-size: 10.5px; letter-spacing: .05em;
+    }
+    .stats-table th:first-child, .stats-table td:first-child { text-align: left; }
+    .stats-table td { padding: 8px; border-bottom: 1px solid #F3F2EC; text-align: right; font-variant-numeric: tabular-nums; }
+    .stats-table td:first-child { font-weight: 600; }
   </style>
 </head>
 <body>
@@ -131,81 +342,205 @@
 
 <!-- 메인 앱 -->
 <div id="appView">
-  <header>
-    <h1>FitSet ML</h1>
-    <div class="platform-tabs">
-      <button class="active" onclick="setPlatform('ios')">iOS</button>
-      <button onclick="setPlatform('android')">Android</button>
-    </div>
-    <a class="mlflow-btn" id="mlflowHomeBtn" href="#" target="_blank">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-      실험 비교 · MLflow
-    </a>
-  </header>
+<div class="shell" id="shell">
 
-  <div id="mainView">
-    <section>
-      <h2>학습 데이터</h2>
-      <div class="list-toolbar">
-        <select class="class-filter" id="classFilter" onchange="renderFiles()">
-          <option value="">전체 종목</option>
-        </select>
-        <label class="select-all">
-          <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this.checked)" />
-          전체선택
-        </label>
+  <!-- 사이드바 -->
+  <aside>
+    <div class="brand">
+      <div class="brand-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6.5 6.5v11M17.5 6.5v11M3 9v6M21 9v6M6.5 12h11"/></svg>
       </div>
-      <p class="select-count" id="selectCount">0개 선택됨</p>
-      <div class="file-list" id="fileList"><p class="empty">로딩 중...</p></div>
-    </section>
+      <span class="brand-name">FitSet ML</span>
+    </div>
+    <div class="side-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+      <input placeholder="Search..." oninput="sideSearch(this.value)" />
+    </div>
+    <nav>
+      <a class="nav-item active" href="#" onclick="navTo(event, this, 'top')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
+        <span class="side-label">대시보드</span>
+      </a>
+      <a class="nav-item" href="#" onclick="navTo(event, this, 'dataSection')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
+        <span class="side-label">학습 데이터</span>
+        <svg class="nav-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/></svg>
+      </a>
+      <a class="nav-item" href="#" onclick="navTo(event, this, 'runsSection')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span class="side-label">학습 이력</span>
+      </a>
+      <a class="nav-item" href="#" onclick="navTo(event, this, 'progressCard')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
+        <span class="side-label">진행 상황</span>
+      </a>
+      <a class="nav-item" href="#" onclick="navTo(event, this, 'deploySection')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 19 6v6c0 5-3 8-7 10-4-2-7-5-7-10V6z"/></svg>
+        <span class="side-label">배포</span>
+      </a>
+      <a class="nav-item" href="#" onclick="navTo(event, this, 'versionSection')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="19" x2="20" y2="19"/><rect x="5" y="11" width="3" height="8"/><rect x="10.5" y="6" width="3" height="13"/><rect x="16" y="14" width="3" height="5"/></svg>
+        <span class="side-label">버전 분포</span>
+        <svg class="nav-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/></svg>
+      </a>
+      <a class="nav-item" href="#" id="navMlflow" target="_blank">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6H5V6h6"/><polyline points="14 3 21 3 21 10"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        <span class="side-label">MLflow</span>
+      </a>
+    </nav>
+    <div class="side-bottom">
+      <div class="profile">
+        <div class="avatar">J</div>
+        <div class="profile-meta">
+          <span class="name">juhan</span>
+          <span class="role-pill">Admin</span>
+        </div>
+      </div>
+      <a class="nav-item" href="#" onclick="navTo(event, this, 'settingsSection')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        <span class="side-label">Settings</span>
+      </a>
+      <button class="nav-item logout" onclick="location.reload()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span class="side-label">Log out</span>
+      </button>
+    </div>
+    <button class="collapse-btn" onclick="toggleSidebar()" id="collapseBtn">&lt;</button>
+  </aside>
 
-    <section style="grid-column: 1">
-      <h2>학습 이력 · 배포</h2>
-      <div style="overflow-x:auto" id="runsBox"><p class="empty">로딩 중...</p></div>
-    </section>
+  <!-- 메인 -->
+  <main id="top">
+    <div class="topbar">
+      <h1>대시보드</h1>
+      <div class="platform-tabs">
+        <button class="active" onclick="setPlatform('ios')">iOS</button>
+        <button onclick="setPlatform('android')">Android</button>
+      </div>
+      <a class="mlflow-btn" id="mlflowHomeBtn" href="#" target="_blank">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        실험 비교 · MLflow
+      </a>
+    </div>
 
-    <div class="sidebar">
-      <section>
-        <h2>학습 설정</h2>
-        <div class="form-group">
-          <label>Epochs</label>
-          <input type="number" id="epochs" value="200" min="1" max="1000" />
-        </div>
-        <div class="form-group" style="margin-top:10px">
-          <label>Learning Rate</label>
-          <input type="text" id="lr" value="0.001" />
-        </div>
-        <div style="display:flex;gap:8px;margin-top:14px">
-          <button class="btn btn-primary" id="trainBtn" onclick="startTrain()" style="flex:1">학습 시작</button>
-          <button class="btn btn-secondary" onclick="loadFiles()">↻</button>
-        </div>
+    <div class="grid">
+
+      <!-- 1행: KPI ─────────────────────────────────────── -->
+      <section class="card kpi">
+        <h2>학습 데이터</h2>
+        <div class="big" id="kpiFileCount">-</div>
+        <div class="sub" id="kpiFileSub">등록된 CSV 파일</div>
+        <button class="orange-link" onclick="document.getElementById('dataSection').scrollIntoView({behavior:'smooth'})">학습 데이터 보기 <span>&rarr;</span></button>
       </section>
 
-      <section>
-        <h2>진행 상황</h2>
-        <div class="progress-box" id="progressBox">
-          <div class="progress-label" id="progressLabel"></div>
-          <div class="progress-bar-track"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div>
-          <div class="metrics-grid" id="metricsGrid"></div>
-          <a class="run-link" id="mlflowRunLink" href="#" target="_blank" style="display:none">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-            MLflow에서 이 run 보기 →
-          </a>
+      <section class="card kpi">
+        <h2>Best Val Acc</h2>
+        <div class="big"><span id="kpiBestAcc">-</span>
+          <span class="arrow-up" id="kpiAccArrow" style="display:none">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+          </span>
         </div>
-        <div id="noProgress" class="empty">학습 이력 없음</div>
+        <div class="sub" id="kpiAccSub">완료된 학습 없음</div>
+        <a class="orange-link" id="kpiMlflowLink" href="#" target="_blank">실험 비교 · MLflow <span>&rarr;</span></a>
       </section>
 
-      <section>
-        <h2>배포된 모델</h2>
-        <div id="modelInfo"><p class="empty">로딩 중...</p></div>
-        <button class="btn btn-success" id="deployBtn" onclick="deployModel()" style="width:100%;margin-top:12px;display:none">이 버전 배포</button>
+      <!-- 진행 상황: 반원 게이지 -->
+      <section class="card kpi center" id="progressCard">
+        <h2>학습 진행률</h2>
+        <div class="gauge-wrap">
+          <svg viewBox="0 0 200 110">
+            <path d="M 16 100 A 84 84 0 0 1 184 100" fill="none" stroke="#F1EEE6" stroke-width="15" stroke-linecap="round"/>
+            <path d="M 16 100 A 84 84 0 0 1 184 100" fill="none" stroke="#F0A93E" stroke-width="15" stroke-linecap="round"
+                  id="gaugeFill" stroke-dasharray="264" stroke-dashoffset="264"/>
+          </svg>
+          <div class="gauge-num" id="gaugeNum">0%</div>
+        </div>
+        <div class="gauge-status" id="progressLabel">학습 이력 없음</div>
+        <div class="metrics-grid" id="metricsGrid">
+          <div class="metric-box"><div class="lbl">Train Loss</div><div class="val">-</div></div>
+          <div class="metric-box"><div class="lbl">Val Loss</div><div class="val">-</div></div>
+          <div class="metric-box"><div class="lbl">Val Acc</div><div class="val">-</div></div>
+        </div>
+        <a class="orange-link" id="mlflowRunLink" href="#" target="_blank" style="display:none">MLflow에서 이 run 보기 <span>&rarr;</span></a>
       </section>
 
-      <section>
-        <h2>버전 분포</h2>
+      <!-- 2행: 학습 데이터 테이블 (테이블 카드 스펙) ─────── -->
+      <section class="card table-card" id="dataSection">
+        <div class="card-head" style="margin-bottom:14px">
+          <h2>학습 데이터</h2>
+          <span class="select-count" id="selectCount">0개 선택됨</span>
+        </div>
+        <div class="table-toolbar">
+          <button class="icon-btn" title="종목 필터" onclick="toggleClassFilter()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.5 10 19 14 21 14 12.5 22 3"/></svg>
+          </button>
+          <select class="class-filter" id="classFilter" onchange="filterChanged()">
+            <option value="">전체 종목</option>
+          </select>
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+            <input id="searchInput" placeholder="Search..." oninput="filterChanged()" />
+          </div>
+          <button class="btn-blue" onclick="loadFiles()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2-9.4L23 10"/></svg>
+            새로고침
+          </button>
+        </div>
+        <div class="table-wrap">
+          <div id="fileList"><p class="empty">로딩 중...</p></div>
+          <div class="table-fade" id="tableFade"></div>
+        </div>
+        <div class="pagi" id="pagiBar"></div>
+      </section>
+
+      <!-- 3행: 학습 이력(넓게) + 설정/배포 스택 ─────────── -->
+      <section class="card runs-card" id="runsSection">
+        <div class="card-head"><h2>학습 이력 · 배포</h2></div>
+        <div style="overflow-x:auto" id="runsBox"><p class="empty">로딩 중...</p></div>
+      </section>
+
+      <div class="side-stack">
+        <section class="card" id="settingsSection" style="display:flex;flex-direction:column;gap:12px">
+          <h2>학습 설정</h2>
+          <div class="form-group">
+            <label>Epochs</label>
+            <input type="number" id="epochs" value="200" min="1" max="1000" />
+          </div>
+          <div class="form-group">
+            <label>Learning Rate</label>
+            <input type="text" id="lr" value="0.001" />
+          </div>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="btn btn-primary" id="trainBtn" onclick="startTrain()" style="flex:1">학습 시작</button>
+          </div>
+        </section>
+
+        <section class="card" id="deploySection">
+          <div class="card-head"><h2>배포된 모델</h2></div>
+          <div id="modelInfo"><p class="empty">로딩 중...</p></div>
+          <button class="btn btn-primary" id="deployBtn" onclick="deployModel()" style="width:100%;margin-top:14px;display:none">이 버전 배포</button>
+        </section>
+      </div>
+
+      <!-- 4행: 버전 분포(가로 막대 랭킹) ─────────────────── -->
+      <section class="card version-card" id="versionSection">
+        <div class="card-head"><h2>버전 분포</h2></div>
         <div id="versionStats"><p class="empty">로딩 중...</p></div>
       </section>
+
     </div>
+  </main>
+</div>
+</div>
+
+<!-- 파일 통계 모달 -->
+<div class="modal-backdrop" id="statsModal" onclick="if(event.target===this)closeStats()">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="statsTitle"></h3>
+      <button class="modal-close" onclick="closeStats()">✕</button>
+    </div>
+    <div class="modal-sub" id="statsSub"></div>
+    <div id="statsBody"></div>
   </div>
 </div>
 
@@ -213,6 +548,8 @@
 // 대시보드가 열린 호스트 기준으로 같은 서버의 MLflow(:5001)를 가리킨다 (IP/도메인 바뀌어도 자동).
 const MLFLOW = location.protocol + '//' + location.hostname + ':5001';
 document.getElementById('mlflowHomeBtn').href = MLFLOW;
+document.getElementById('navMlflow').href = MLFLOW;
+document.getElementById('kpiMlflowLink').href = MLFLOW;
 const PASSWORD = '열려라 참깨';
 
 function unlock() {
@@ -233,6 +570,24 @@ function unlock() {
   }
 }
 
+// ── 사이드바 ───────────────────────────────────────────────────────────
+function toggleSidebar() {
+  const c = document.getElementById('shell').classList.toggle('collapsed');
+  document.getElementById('collapseBtn').textContent = c ? '>' : '<';
+}
+function navTo(event, el, id) {
+  event.preventDefault();
+  document.querySelectorAll('nav .nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+}
+function sideSearch(q) {
+  // 사이드바 검색 = 테이블 검색과 동일한 상태를 공유
+  document.getElementById('searchInput').value = q;
+  filterChanged();
+  if (q) document.getElementById('dataSection').scrollIntoView({ behavior: 'smooth' });
+}
+
 let platform = 'ios';
 let selectedFiles = new Set();
 let pollTimer = null;
@@ -247,6 +602,7 @@ function setPlatform(p) {
   document.querySelectorAll('.platform-tabs button').forEach(b =>
     b.classList.toggle('active', b.textContent.toLowerCase() === p));
   selectedFiles.clear();
+  page = 1;
   clearPoll();
   loadFiles();
   loadModelInfo();
@@ -261,11 +617,16 @@ async function api(method, path, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+  if (!res.ok) throw new Error(data.message || data.detail || JSON.stringify(data));
   return data;
 }
 
+// ── 학습 데이터 테이블 ─────────────────────────────────────────────────
 let allFiles = [];
+let page = 1;
+let rowsPerPage = 10;
+let sortKey = null;      // 'filename' | 'class' | 'collectedAt'
+let sortDir = 1;         // 1 asc, -1 desc
 
 async function loadFiles() {
   const el = document.getElementById('fileList');
@@ -275,7 +636,8 @@ async function loadFiles() {
     allFiles = data.files;
     rebuildClassFilter();
     renderFiles();
-  } catch(e) { el.innerHTML = `<p class="empty" style="color:#f87171">${e.message}</p>`; }
+    renderKpis();
+  } catch(e) { el.innerHTML = `<p class="empty" style="color:#DC2626">${e.message}</p>`; }
 }
 
 // 데이터에 실제로 존재하는 종목으로 필터 옵션을 구성(현재 선택은 유지, 사라진 종목이면 전체로 복귀)
@@ -288,25 +650,106 @@ function rebuildClassFilter() {
   sel.value = classes.includes(prev) ? prev : '';
 }
 
-// 현재 필터가 적용된, 종목별로 정렬된 목록
+function toggleClassFilter() { document.getElementById('classFilter').classList.toggle('open'); }
+function filterChanged() { page = 1; renderFiles(); }
+
+// 현재 필터·검색·정렬이 적용된 목록 (페이지네이션 이전)
 function visibleFiles() {
   const filter = document.getElementById('classFilter').value;
-  return allFiles
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  let files = allFiles
     .filter(f => !filter || f.class === filter)
-    .sort((a, b) => a.class.localeCompare(b.class) || a.filename.localeCompare(b.filename));
+    .filter(f => !q || f.filename.toLowerCase().includes(q) || (f.deviceId ?? '').toLowerCase().includes(q));
+  if (sortKey) {
+    files = [...files].sort((a, b) => sortDir * String(a[sortKey] ?? '').localeCompare(String(b[sortKey] ?? '')));
+  } else {
+    files = [...files].sort((a, b) => a.class.localeCompare(b.class) || a.filename.localeCompare(b.filename));
+  }
+  return files;
+}
+
+function setSort(key) {
+  if (sortKey === key) { sortDir = -sortDir; } else { sortKey = key; sortDir = 1; }
+  renderFiles();
+}
+
+function fmtDate(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function statusPill(f) {
+  if (f.uploaded === false) return '<span class="pill pending">업로드 대기</span>';
+  if (f.trainedInVersion)   return `<span class="pill trained">${f.trainedInVersion} 학습됨</span>`;
+  return '<span class="pill idle">미학습</span>';
+}
+
+function sortIc(key) {
+  if (sortKey !== key) return '<span class="sort-ic">↕</span>';
+  return `<span class="sort-ic">${sortDir === 1 ? '▲' : '▼'}</span>`;
 }
 
 function renderFiles() {
   const el = document.getElementById('fileList');
   const files = visibleFiles();
-  if (!files.length) { el.innerHTML = '<p class="empty">CSV 파일이 없습니다</p>'; updateSelectCount(); return; }
-  el.innerHTML = files.map(f => `
-    <div class="file-item ${selectedFiles.has(f.filename) ? 'selected' : ''}" onclick="toggleFile(this,'${f.filename}')">
-      <input type="checkbox" ${selectedFiles.has(f.filename) ? 'checked' : ''} onclick="event.stopPropagation();toggleFile(this.closest('.file-item'),'${f.filename}')"/>
-      <span class="file-name">${f.filename}</span>
-      <span class="badge">${f.class}</span>
-      ${f.trainedInVersion ? `<span class="badge trained">${f.trainedInVersion}</span>` : ''}
-    </div>`).join('');
+  const pages = Math.max(1, Math.ceil(files.length / rowsPerPage));
+  if (page > pages) page = pages;
+  const start = (page - 1) * rowsPerPage;
+  const slice = files.slice(start, start + rowsPerPage);
+
+  if (!files.length) {
+    el.innerHTML = '<p class="empty">CSV 파일이 없습니다</p>';
+    document.getElementById('tableFade').classList.remove('visible');
+    document.getElementById('pagiBar').innerHTML = '';
+    updateSelectCount();
+    return;
+  }
+
+  el.innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th style="width:36px"><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this.checked)" /></th>
+        <th style="width:44px">#</th>
+        <th class="sortable ${sortKey==='filename'?'sorted':''}" onclick="setSort('filename')">파일명 ${sortIc('filename')}</th>
+        <th class="sortable ${sortKey==='class'?'sorted':''}" onclick="setSort('class')">종목 ${sortIc('class')}</th>
+        <th>상태</th>
+        <th class="sortable cell-right ${sortKey==='collectedAt'?'sorted':''}" onclick="setSort('collectedAt')" style="text-align:right">수집일시 ${sortIc('collectedAt')}</th>
+        <th style="width:52px;text-align:center">통계</th>
+      </tr></thead>
+      <tbody>
+        ${slice.map((f, i) => `
+        <tr class="${selectedFiles.has(f.filename) ? 'selected' : ''}" onclick="toggleFile(this,'${f.filename}')">
+          <td><input type="checkbox" ${selectedFiles.has(f.filename) ? 'checked' : ''}
+                onclick="event.stopPropagation();toggleFile(this.closest('tr'),'${f.filename}')"/></td>
+          <td class="row-num">${start + i + 1}</td>
+          <td class="cell-name"><div class="nm">${f.filename}</div><div class="id">${f.deviceId ?? '-'}</div></td>
+          <td><span class="pill class">${f.class}</span></td>
+          <td>${statusPill(f)}</td>
+          <td class="cell-right"><div class="v">${fmtDate(f.collectedAt)}</div></td>
+          <td style="text-align:center">
+            <button class="stats-btn" title="센서 통계 보기" onclick="event.stopPropagation();openStats('${f.filename}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            </button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+
+  // 마지막 페이지가 아니면 아래로 페이드아웃(다음 페이지가 이어지는 느낌)
+  document.getElementById('tableFade').classList.toggle('visible', page < pages);
+
+  document.getElementById('pagiBar').innerHTML = `
+    <span class="range">${start + 1}-${start + slice.length} of ${files.length}</span>
+    <span>Rows per page:</span>
+    <select onchange="rowsPerPage=parseInt(this.value);page=1;renderFiles()">
+      ${[10, 25, 50].map(n => `<option value="${n}" ${n === rowsPerPage ? 'selected' : ''}>${n}</option>`).join('')}
+    </select>
+    <button class="pg-btn" onclick="page--;renderFiles()" ${page <= 1 ? 'disabled' : ''}>‹</button>
+    <button class="pg-btn" onclick="page++;renderFiles()" ${page >= pages ? 'disabled' : ''}>›</button>
+    <span>${page}/${pages}</span>`;
+
   updateSelectCount();
 }
 
@@ -316,7 +759,7 @@ function toggleFile(el, name) {
   updateSelectCount();
 }
 
-// 전체선택: 현재 필터로 보이는 파일들만 대상으로 선택/해제
+// 전체선택: 현재 필터·검색으로 보이는 파일들(모든 페이지)을 선택/해제
 function toggleSelectAll(checked) {
   visibleFiles().forEach(f =>
     checked ? selectedFiles.add(f.filename) : selectedFiles.delete(f.filename));
@@ -326,10 +769,32 @@ function toggleSelectAll(checked) {
 function updateSelectCount() {
   document.getElementById('selectCount').textContent = `${selectedFiles.size}개 선택됨`;
   const files = visibleFiles();
-  document.getElementById('selectAll').checked =
-    files.length > 0 && files.every(f => selectedFiles.has(f.filename));
+  const all = document.getElementById('selectAll');
+  if (all) all.checked = files.length > 0 && files.every(f => selectedFiles.has(f.filename));
 }
 
+// ── KPI ────────────────────────────────────────────────────────────────
+function renderKpis() {
+  document.getElementById('kpiFileCount').textContent = allFiles.length;
+  const untrained = allFiles.filter(f => !f.trainedInVersion).length;
+  document.getElementById('kpiFileSub').textContent = `등록된 CSV 파일 · 미학습 ${untrained}개`;
+}
+
+function renderBestAcc() {
+  const done = runsData.filter(r => r.status === 'FINISHED' && r.metrics.valAccuracy != null);
+  if (!done.length) {
+    document.getElementById('kpiBestAcc').textContent = '-';
+    document.getElementById('kpiAccArrow').style.display = 'none';
+    document.getElementById('kpiAccSub').textContent = '완료된 학습 없음';
+    return;
+  }
+  const best = Math.max(...done.map(r => r.metrics.valAccuracy));
+  document.getElementById('kpiBestAcc').textContent = (best * 100).toFixed(1) + '%';
+  document.getElementById('kpiAccArrow').style.display = 'inline-flex';
+  document.getElementById('kpiAccSub').textContent = `완료된 학습 ${done.length}회 중 최고 검증 정확도`;
+}
+
+// ── 학습 ───────────────────────────────────────────────────────────────
 async function startTrain() {
   if (!selectedFiles.size) { alert('파일을 1개 이상 선택하세요'); return; }
   const btn = document.getElementById('trainBtn');
@@ -347,12 +812,18 @@ async function startTrain() {
   } catch(e) { alert(e.message); btn.disabled = false; }
 }
 
+const GAUGE_LEN = 264;   // 반원 호 길이 (stroke-dasharray 기준)
+function setGauge(pct) {
+  document.getElementById('gaugeFill').setAttribute('stroke-dashoffset', GAUGE_LEN * (1 - pct / 100));
+  document.getElementById('gaugeNum').textContent = pct + '%';
+}
+
 function showProgress(version, total) {
-  document.getElementById('progressBox').classList.add('visible');
-  document.getElementById('noProgress').style.display = 'none';
+  setGauge(0);
   document.getElementById('progressLabel').innerHTML = `<b>${version}</b> 학습 중...`;
-  document.getElementById('progressFill').style.width = '0%';
-  document.getElementById('metricsGrid').innerHTML = '';
+  document.getElementById('metricsGrid').innerHTML = [
+    ['Train Loss', '-'], ['Val Loss', '-'], ['Val Acc', '-'],
+  ].map(([l,v]) => `<div class="metric-box"><div class="lbl">${l}</div><div class="val">${v}</div></div>`).join('');
   document.getElementById('mlflowRunLink').style.display = 'none';
 }
 
@@ -363,14 +834,13 @@ function pollStatus() {
       const { data } = await api('GET', `/train/status?jobId=${currentJobId}`);
       const { status, experimentId, epoch, totalEpochs, trainLoss, valLoss, valAccuracy } = data;
       const pct = totalEpochs ? Math.round((epoch / totalEpochs) * 100) : 0;
-      document.getElementById('progressFill').style.width = pct + '%';
+      setGauge(pct);
       document.getElementById('progressLabel').innerHTML =
         `<b>${lastVersion}</b> ${status === 'running' ? `epoch ${epoch}/${totalEpochs}` : status}`;
       document.getElementById('metricsGrid').innerHTML = [
         ['Train Loss', trainLoss?.toFixed(4) ?? '-'],
         ['Val Loss',   valLoss?.toFixed(4)   ?? '-'],
         ['Val Acc',    valAccuracy ? (valAccuracy * 100).toFixed(1) + '%' : '-'],
-        ['진행',        pct + '%'],
       ].map(([l,v]) => `<div class="metric-box"><div class="lbl">${l}</div><div class="val">${v}</div></div>`).join('');
 
       const link = document.getElementById('mlflowRunLink');
@@ -378,7 +848,7 @@ function pollStatus() {
       link.href = experimentId
         ? `${MLFLOW}/#/experiments/${experimentId}/runs/${currentJobId}`
         : `${MLFLOW}/#/experiments/0/runs/${currentJobId}`;
-      link.style.display = 'flex';
+      link.style.display = 'inline-flex';
 
       if (status === 'completed' || status === 'failed') {
         clearPoll();
@@ -395,6 +865,7 @@ function pollStatus() {
 }
 function clearPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
 
+// ── 배포 ───────────────────────────────────────────────────────────────
 async function deployModel() {
   deployVersion(document.getElementById('deployBtn').dataset.version);
 }
@@ -417,12 +888,8 @@ async function loadModelInfo() {
     const { data } = await api('GET', '/model/latest');
     deployedVersion = data.latestVersion;
     el.innerHTML = `
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div style="display:flex;justify-content:space-between;font-size:13px">
-          <span style="color:#666">버전</span><span style="font-weight:600">${data.latestVersion}</span>
-        </div>
-        <div style="font-size:11px;color:#444;word-break:break-all">${data.modelUrl}</div>
-      </div>`;
+      <div class="deployed-version">${data.latestVersion}</div>
+      <div class="deployed-url">${data.modelUrl}</div>`;
   } catch(e) {
     deployedVersion = null;
     el.innerHTML = `<p class="empty">${e.message.includes('404') ? '배포된 모델 없음' : e.message}</p>`;
@@ -430,8 +897,44 @@ async function loadModelInfo() {
   renderRuns();   // 배포 배지가 최신 배포 버전을 따라가도록 재렌더
 }
 
-// ── 학습 이력 · 선택 배포 ──────────────────────────────────────────────
+// ── 파일 통계 모달 ─────────────────────────────────────────────────────
+const CHANNEL_UNITS = { ax: 'm/s²', ay: 'm/s²', az: 'm/s²', gx: 'rad/s', gy: 'rad/s', gz: 'rad/s' };
 
+async function openStats(filename) {
+  const modal = document.getElementById('statsModal');
+  document.getElementById('statsTitle').textContent = filename;
+  document.getElementById('statsSub').textContent = '';
+  document.getElementById('statsBody').innerHTML = '<p class="empty">로딩 중...</p>';
+  modal.classList.add('visible');
+  try {
+    const { data } = await api('GET', `/data/stats?filename=${encodeURIComponent(filename)}`);
+    document.getElementById('statsSub').innerHTML =
+      `${data.class} · ${data.durationSeconds}초 · ${data.usedRows.toLocaleString()}/${data.totalRows.toLocaleString()} 샘플 사용 · `
+      + (data.trimApplied
+          ? `앞뒤 ${data.trimSeconds}초 제외`
+          : `<span class="warn">파일이 짧아 전체 구간으로 계산됨</span>`);
+    document.getElementById('statsBody').innerHTML = `
+      <table class="stats-table">
+        <thead><tr><th>채널</th><th>평균</th><th>최소</th><th>최대</th><th>표준편차</th></tr></thead>
+        <tbody>
+          ${data.channels.map(c => `<tr>
+            <td>${c.channel} <span style="color:#9CA3AF;font-weight:400">${CHANNEL_UNITS[c.channel] ?? ''}</span></td>
+            <td>${c.mean.toFixed(3)}</td>
+            <td>${c.min.toFixed(3)}</td>
+            <td>${c.max.toFixed(3)}</td>
+            <td>${c.std.toFixed(3)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch(e) {
+    document.getElementById('statsBody').innerHTML = `<p class="empty" style="color:#DC2626">${e.message}</p>`;
+  }
+}
+
+function closeStats() { document.getElementById('statsModal').classList.remove('visible'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeStats(); });
+
+// ── 학습 이력 · 선택 배포 ──────────────────────────────────────────────
 async function loadRuns() {
   const el = document.getElementById('runsBox');
   try {
@@ -439,7 +942,8 @@ async function loadRuns() {
     runsData = data.runs || [];
     bestRunId = data.bestRunId ?? null;
     renderRuns();
-  } catch(e) { el.innerHTML = `<p class="empty" style="color:#f87171">${e.message}</p>`; }
+    renderBestAcc();
+  } catch(e) { el.innerHTML = `<p class="empty" style="color:#DC2626">${e.message}</p>`; }
 }
 
 function renderRuns() {
@@ -456,41 +960,41 @@ function renderRuns() {
         const f1  = r.metrics.f1Macro != null ? r.metrics.f1Macro.toFixed(3) : '-';
         const started = new Date(r.startTime).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
         const dur = r.duration != null ? `${Math.floor(r.duration / 60)}분 ${r.duration % 60}초` : '-';
-        const statusBadge = r.status === 'FAILED' ? '<span class="badge failed">실패</span>'
-          : r.status === 'RUNNING' ? '<span class="badge">학습 중</span>'
-          : '<span class="badge trained">완료</span>';
+        const statusBadge = r.status === 'FAILED' ? '<span class="pill failed">실패</span>'
+          : r.status === 'RUNNING' ? '<span class="pill idle">학습 중</span>'
+          : '<span class="pill trained">완료</span>';
         // 배포 열: 현재 배포 버전이면 배지, 완료된 run이면 배포 버튼(롤백 포함)
-        const action = r.version === deployedVersion ? '<span class="badge deployed">배포됨</span>'
+        const action = r.version === deployedVersion ? '<span class="pill deployed">배포됨</span>'
           : r.status === 'FINISHED' ? `<button class="btn-deploy-row" onclick="deployVersion('${r.version}')">배포</button>`
           : '';
         return `<tr>
-          <td><b>${r.version}</b>${r.runId === bestRunId ? ' <span class="badge best">BEST</span>' : ''}</td>
+          <td><b>${r.version}</b>${r.runId === bestRunId ? ' <span class="pill best">BEST</span>' : ''}</td>
           <td>${statusBadge}</td>
           <td>${acc}</td>
           <td>${f1}</td>
           <td>${r.params.numFiles ?? '-'}</td>
-          <td style="color:#888">${started}</td>
-          <td style="color:#888">${dur}</td>
+          <td style="color:#9CA3AF">${started}</td>
+          <td style="color:#9CA3AF">${dur}</td>
           <td>${action}</td>
         </tr>`;
       }).join('')}</tbody>
     </table>`;
 }
 
-// ── 버전 분포 ──────────────────────────────────────────────────────────
-
+// ── 버전 분포 (오렌지 가로 막대 랭킹) ──────────────────────────────────
 async function loadVersionStats() {
   const el = document.getElementById('versionStats');
   try {
     const { data } = await api('GET', '/model/version-stats');
     if (!data.stats.length) { el.innerHTML = '<p class="empty">최근 24시간 리포트 없음</p>'; return; }
+    const maxRatio = Math.max(...data.stats.map(s => s.ratio), 0.0001);
     el.innerHTML = data.stats.map(s => `
       <div class="dist-row">
-        <span class="dist-version">${s.version}</span>
-        <div class="dist-track"><div class="dist-fill ${s.version === data.latestVersion ? 'latest' : ''}" style="width:${Math.round(s.ratio * 100)}%"></div></div>
+        <div class="dist-bar ${s.version === data.latestVersion ? 'latest' : ''}"
+             style="width:${Math.max(10, Math.round(s.ratio / maxRatio * 78))}%">${s.version}</div>
         <span class="dist-num">${s.count}건 · ${Math.round(s.ratio * 100)}%</span>
       </div>`).join('')
-      + `<div class="dist-caption">최근 24시간 폴링 리포트 ${data.totalReports}건 기준 · 초록 = 최신 배포 버전</div>`;
+      + `<div class="dist-caption">최근 24시간 폴링 리포트 ${data.totalReports}건 기준 · 진한 막대 = 최신 배포 버전</div>`;
   } catch(e) { el.innerHTML = `<p class="empty">${e.message}</p>`; }
 }
 </script>
