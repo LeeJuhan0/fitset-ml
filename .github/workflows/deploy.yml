@@ -136,7 +136,7 @@ jobs:
       - name: Health check via ALB
         run: |
           for i in $(seq 1 10); do
-            CODE=$(curl -s -o /dev/null -w "%{http_code}" https://admin.fitset.kro.kr/api/docs)
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" https://admin.fitset.kro.kr/api/health)
             echo "Attempt $i: $CODE"
             [ "$CODE" = "200" ] && exit 0
             sleep 10

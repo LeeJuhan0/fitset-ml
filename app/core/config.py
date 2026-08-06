@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     # AWS
     aws_region: str = "ap-northeast-2"         # boto3 클라이언트 region
 
+    # 클래스 번호와 운동 slug 매핑 테이블(공개 CDN, GET /model/latest 의 metaUrl 로 내려감)
+    class_mapping_url: str = "https://dtcevtkuvdwt9.cloudfront.net/models/class-mapping.json"
+
     class Config:
         env_file = ".env"                      # 오버라이드 값을 읽어올 파일 경로
 

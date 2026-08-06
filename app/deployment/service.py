@@ -79,6 +79,7 @@ def latest(platform: str, current_version: str | None) -> dict:
         "latestVersion": latest_version,
         # latest.json에는 s3:// 정본 경로가 저장돼 있고, 앱에는 임시 서명 HTTPS URL로 내려준다.
         "modelUrl": generate_presigned_model_download_url(latest_info["modelUrl"]),
+        "metaUrl": settings.class_mapping_url,   # 클래스 번호와 운동 slug 매핑 테이블(공개 CDN)
         "isUpToDate": current_version == latest_version,   # 앱이 최신인지 여부
     }
 

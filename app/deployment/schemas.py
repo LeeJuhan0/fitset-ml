@@ -21,6 +21,7 @@ class ModelLatestData(CamelModel):
     # GET /model/latest 응답 data
     latest_version: str
     model_url: str                # 임시 서명 HTTPS 다운로드 URL
+    meta_url: str                 # 클래스 번호와 운동 slug 매핑 테이블(공개 CDN URL)
     is_up_to_date: bool           # 앱이 최신인지 여부
 
 

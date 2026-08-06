@@ -125,6 +125,12 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     return _error_response(request, 500, _FALLBACK_ERROR_CODE, "서버 내부 오류가 발생했습니다.")
 
 
+@app.get("/api/health")
+def health(request: Request):
+    # 배포 헬스체크용 — 앱이 요청을 받는지만 확인한다(외부 의존성 검사 없음).
+    return {"traceId": request.state.trace_id, "data": {"status": "ok"}}
+
+
 # include_router(router) : 그 라우터의 모든 엔드포인트를 앱에 등록. (순서는 동작에 영향 없음)
 # responses=... : 모든 엔드포인트의 OpenAPI 문서(/docs)에 실패 응답 형태를 명시 —
 #   실제 조립은 위 예외 핸들러가 하고, ErrorResponse 스키마는 문서화로만 쓰인다.

@@ -41,6 +41,8 @@ def test_model_latest_up_to_date_flag(client, monkeypatch):
     assert same["isUpToDate"] is True
     # 앱에는 s3:// 정본이 아니라 다운로드 가능한 서명 URL이 내려간다
     assert same["modelUrl"] == "https://signed.example/m/ios/v1.3/FitSet.mlpackage"
+    # 클래스 번호와 운동 slug 매핑 테이블은 공개 CDN URL로 내려간다
+    assert same["metaUrl"] == "https://dtcevtkuvdwt9.cloudfront.net/models/class-mapping.json"
 
     older = client.get("/api/v1/ios/model/latest?currentVersion=v1.0").json()["data"]
     assert older["isUpToDate"] is False
