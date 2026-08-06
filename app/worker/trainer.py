@@ -281,15 +281,15 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
                 except ImportError:
                     mlflow.set_tag("convert_warning", "coremltools not installed")
             else:
-                tflite_path = os.path.join(out, "FitSet.tflite")
+                onnx_path = os.path.join(out, "FitSet.onnx")
                 try:
-                    from app.worker.convert import to_tflite
-                    to_tflite(model.cpu(), mean, std, tflite_path)
-                    upload_model_artifact(platform, version, tflite_path, "FitSet.tflite")
+                    from app.worker.convert import to_onnx
+                    to_onnx(model.cpu(), mean, std, onnx_path)     # → ONNX(앱은 ONNX Runtime 로드)
+                    upload_model_artifact(platform, version, onnx_path, "FitSet.onnx")
                 except ImportError:
-                    mlflow.set_tag("convert_warning", "ai.edge.torch not installed")
+                    mlflow.set_tag("convert_warning", "onnx not installed")
 
-            ext = "mlpackage.zip" if platform == "ios" else "tflite"
+            ext = "mlpackage.zip" if platform == "ios" else "onnx"
             model_url = f"s3://{settings.models_bucket}/{platform}/{version}/FitSet.{ext}"
             meta = {
                 "platform": platform,

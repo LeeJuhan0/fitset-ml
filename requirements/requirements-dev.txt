@@ -2,3 +2,5 @@
 pytest
 httpx          # fastapi.testclient (TestClient) 의존성
 moto[s3]       # S3 통합 테스트 — 조건부 쓰기(IfMatch/IfNoneMatch) 의미를 실제 S3대로 재현
+onnx           # to_onnx 실변환 테스트 (torch.onnx.export가 요구)
+onnxruntime    # 변환 산출물을 앱과 동일하게 로드·추론해 계약(입출력 이름·shape) 검증

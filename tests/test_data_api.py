@@ -21,7 +21,7 @@ def test_list_data_wraps_index(client, monkeypatch):
     resp = client.get("/api/v1/ios/data")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["success"] is True
+    assert body["traceId"]
     assert body["data"] == index
 
 
@@ -57,7 +57,7 @@ def test_presigned_url_rejects_bad_device_id(client):
 
 def test_presigned_url_requires_device_id(client):
     resp = client.get("/api/v1/ios/data/presigned-url?class=SQUAT")
-    assert resp.status_code == 422  # 필수 쿼리 누락
+    assert resp.status_code == 400  # 필수 쿼리 누락 — 검증 실패는 400 INVALID_REQUEST (팀 규약)
 
 
 def _fake_mark_uploaded(index):

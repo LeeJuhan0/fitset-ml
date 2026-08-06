@@ -33,7 +33,7 @@ def test_train_400_on_unknown_file(client, monkeypatch):
     monkeypatch.setattr(train_mod, "get_index", lambda p: {"files": [{"filename": "a.csv"}]})
     resp = client.post("/api/v1/ios/train", json={"files": ["a.csv", "ghost.csv"]})
     assert resp.status_code == 400
-    assert "ghost.csv" in resp.json()["message"]
+    assert "ghost.csv" in resp.json()["error"]["message"]
 
 
 def test_train_409_when_already_running(client):
@@ -43,6 +43,10 @@ def test_train_409_when_already_running(client):
 
     resp = client.post("/api/v1/ios/train", json={"files": ["a.csv"]})
     assert resp.status_code == 409
+    # 비즈니스 충돌은 CONFLICT — 서버 오류(INTERNAL_ERROR)와 코드로 구분돼야 한다
+    assert resp.json()["error"]["code"] == "CONFLICT"
+    # 실패 응답도 X-Trace-Id 헤더 보장(핸들러가 직접 싣는다 — 500 경로 포함)
+    assert resp.headers["X-Trace-Id"] == resp.json()["traceId"]
 
 
 def test_train_202_spawns_worker(client, monkeypatch):

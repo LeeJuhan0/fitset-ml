@@ -2,7 +2,7 @@ name: Restart Docker
 
 # 인프라 재배포(rsync + build --no-cache + terraform)가 아니라,
 # 현재 EC2의 /app·이미지 그대로 컨테이너만 다시 띄우는 수동 워크플로.
-# 저장된 EC2_SSH_KEY로 SSH해서 docker compose up -d --force-recreate 만 실행한다.
+# 프라이빗 서브넷이라 SSH는 SSM 세션(AWS-StartSSHSession)을 ProxyCommand로 터널링한다.
 on:
   workflow_dispatch:
     inputs:
@@ -16,17 +16,36 @@ jobs:
     name: Restart containers
     runs-on: ubuntu-latest
     env:
-      EC2_IP: ${{ vars.EC2_IP || '54.116.160.80' }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID || 'i-0444c98ade25a5c4c' }}
     steps:
-      - name: Setup SSH key
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+      - name: Install Session Manager plugin
+        run: |
+          curl -fsSL "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" \
+            -o /tmp/session-manager-plugin.deb
+          sudo dpkg -i /tmp/session-manager-plugin.deb
+
+      - name: Setup SSH over SSM
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
+          cat >> ~/.ssh/config << 'EOF'
+          Host i-* mi-*
+            User ec2-user
+            StrictHostKeyChecking no
+            ProxyCommand sh -c "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters 'portNumber=%p'"
+          EOF
 
       - name: Docker compose up (재시작, 재배포 아님)
         run: |
           BUILD=""
           if [ "${{ inputs.rebuild }}" = "true" ]; then BUILD="--build"; fi
-          ssh -o StrictHostKeyChecking=no ec2-user@"$EC2_IP" \
+          ssh "$EC2_INSTANCE_ID" \
             "cd /app && sudo docker compose up -d --force-recreate $BUILD && echo '--- ps ---' && sudo docker compose ps"

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:   # 수동 재배포 트리거 (현재 main 코드로 rsync + build + 재기동)
   push:
     branches: [main]
-    # 앱 소스 변경 시에만 배포. 인프라(terraform/**)는 여기서 다루지 않음 — terraform.yml에서 수동 적용.
+    # 앱 소스 변경 시에만 배포. 인프라는 테라폼 없이 AWS CLI/콘솔로 직접 관리한다(2026-08-06 제거).
     # README·docs·.github(yaml)만 바뀌면 서버 재기동 안 함.
     paths:
       - 'app/**'
@@ -44,31 +44,51 @@ jobs:
     name: Deploy App
     runs-on: ubuntu-latest
     needs: [test]
-    # vars.EC2_IP / vars.EC2_DNS 를 레포 Variables에 넣어두면 그걸 쓰고, 없으면 현재 EIP로 폴백.
+    # 서버는 hangang-prod-vpc 프라이빗 서브넷에 있어 퍼블릭 IP가 없다.
+    # SSH는 SSM 세션(AWS-StartSSHSession)을 ProxyCommand로 터널링해서 접속한다.
+    # vars.EC2_INSTANCE_ID 를 레포 Variables에 넣어두면 그걸 쓰고, 없으면 현재 인스턴스로 폴백.
     env:
-      EC2_IP: ${{ vars.EC2_IP || '54.116.160.80' }}
-      EC2_DNS: ${{ vars.EC2_DNS || 'ec2-54-116-160-80.ap-northeast-2.compute.amazonaws.com' }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID || 'i-0444c98ade25a5c4c' }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup SSH key
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+      - name: Install Session Manager plugin
+        run: |
+          curl -fsSL "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" \
+            -o /tmp/session-manager-plugin.deb
+          sudo dpkg -i /tmp/session-manager-plugin.deb
+
+      - name: Setup SSH over SSM
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
+          # 인스턴스 ID로 ssh하면 SSM 세션으로 프록시 — 퍼블릭 IP·인바운드 22 불필요
+          cat >> ~/.ssh/config << 'EOF'
+          Host i-* mi-*
+            User ec2-user
+            StrictHostKeyChecking no
+            ProxyCommand sh -c "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters 'portNumber=%p'"
+          EOF
 
-      - name: Wait for EC2 SSH ready
+      - name: Wait for SSH over SSM ready
         run: |
           for i in $(seq 1 20); do
-            ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
-              ec2-user@$EC2_IP "echo ok" && break
+            ssh -o ConnectTimeout=10 "$EC2_INSTANCE_ID" "echo ok" && break
             echo "Attempt $i failed, retrying..."
             sleep 15
           done
 
       - name: Ensure Docker + Compose installed
         run: |
-          ssh -o StrictHostKeyChecking=no ec2-user@$EC2_IP << 'EOF'
+          ssh "$EC2_INSTANCE_ID" << 'EOF'
           if ! command -v docker &>/dev/null; then
             sudo dnf install -y docker
             sudo systemctl enable --now docker
@@ -81,9 +101,6 @@ jobs:
               -o /usr/local/lib/docker/cli-plugins/docker-compose
             sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
           fi
-          # 기존 systemd 서비스 정리
-          sudo systemctl stop fitset-api mlflow 2>/dev/null || true
-          sudo systemctl disable fitset-api mlflow 2>/dev/null || true
           EOF
 
       - name: Rsync code to EC2
@@ -91,28 +108,22 @@ jobs:
           rsync -az --delete \
             --exclude='.git' \
             --exclude='.venv' \
-            --exclude='terraform' \
             --exclude='mlruns' \
             --exclude='*.pyc' \
             --exclude='__pycache__' \
-            -e "ssh -o StrictHostKeyChecking=no" \
-            ./ ec2-user@$EC2_IP:/app/
+            ./ "$EC2_INSTANCE_ID":/app/
 
-      - name: Inject MLflow allowed-hosts & CORS origins (현재 EIP/DNS)
+      - name: Inject MLflow allowed-hosts & CORS origins
         run: |
-          # compose가 자동 로드하는 /app/.env에 현재 EIP·DNS를 주입.
-          # - EC2_ALLOWED_HOST: Host 헤더 검증(--allowed-hosts)
-          # - EC2_CORS_ORIGINS: CORS origin 검증(--cors-allowed-origins, http:// 스킴 포함)
-          #   POST(예: traces/metrics) 차단 → "Failed to load chart data" 방지
-          # rsync(--delete) 이후에 생성해야 살아남는다(이 step은 rsync 다음).
-          ALLOWED="${EC2_IP}:5001,${EC2_DNS}:5001"
-          CORS="http://${EC2_IP}:5001,http://${EC2_DNS}:5001"
-          ssh -o StrictHostKeyChecking=no ec2-user@$EC2_IP \
-            "printf 'EC2_ALLOWED_HOST=%s\nEC2_CORS_ORIGINS=%s\n' '${ALLOWED}' '${CORS}' | sudo tee /app/.env >/dev/null"
+          # compose가 자동 로드하는 /app/.env 주입.
+          # 프라이빗 서브넷이라 MLflow UI는 SSM 포트포워딩으로 localhost:5001 접속 →
+          # allowed-hosts/CORS도 localhost 기준. rsync(--delete) 이후에 생성해야 살아남는다.
+          ssh "$EC2_INSTANCE_ID" \
+            "printf 'EC2_ALLOWED_HOST=%s\nEC2_CORS_ORIGINS=%s\n' 'localhost:5001,127.0.0.1:5001' 'http://localhost:5001,http://127.0.0.1:5001' | sudo tee /app/.env >/dev/null"
 
       - name: Build & start containers
         run: |
-          ssh -o StrictHostKeyChecking=no ec2-user@$EC2_IP << 'EOF'
+          ssh "$EC2_INSTANCE_ID" << 'EOF'
           set -e   # 빌드 실패 시 즉시 중단 → deploy도 실패(거짓 성공 방지)
           cd /app
           sudo docker system prune -af   # 옛 이미지·빌드 캐시 정리(디스크 확보)
@@ -121,3 +132,13 @@ jobs:
           sudo docker compose up -d --force-recreate
           sudo docker compose ps
           EOF
+
+      - name: Health check via ALB
+        run: |
+          for i in $(seq 1 10); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" https://admin.fitset.kro.kr/api/docs)
+            echo "Attempt $i: $CODE"
+            [ "$CODE" = "200" ] && exit 0
+            sleep 10
+          done
+          echo "Health check failed" && exit 1

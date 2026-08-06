@@ -11,8 +11,9 @@ REPORT_WINDOW_SECONDS = 24 * 3600   # 24시간
 
 
 def model_url(platform: str, version: str) -> str:
-    # 모델 포맷 규칙: iOS는 mlpackage(zip), Android는 tflite — 저장 경로의 정본 조립.
-    ext = "mlpackage.zip" if platform == "ios" else "tflite"
+    # 모델 포맷 규칙: iOS는 mlpackage(zip), Android는 onnx — 저장 경로의 정본 조립.
+    # Android는 앱이 ONNX Runtime을 쓰므로 onnx를 배포 포맷으로 한다 (tflite 변환은 ai_edge_torch 미동작).
+    ext = "mlpackage.zip" if platform == "ios" else "onnx"
     return f"s3://{settings.models_bucket}/{platform}/{version}/FitSet.{ext}"
 
 

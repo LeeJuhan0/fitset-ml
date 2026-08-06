@@ -1,7 +1,7 @@
 """모델 배포 API (app.deployment) — MLflow·S3 의존은 service 네임스페이스에서 가짜로 대체.
 
 배포는 MLflow run 존재 확인 → latest.json 업데이트. 플랫폼별 모델 확장자
-(ios=.mlpackage.zip / android=.tflite)가 올바른지 검증한다."""
+(ios=.mlpackage.zip / android=.onnx)가 올바른지 검증한다."""
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -38,7 +38,7 @@ def test_deploy_404_when_version_run_missing(client, monkeypatch):
     assert resp.status_code == 404
 
 
-@pytest.mark.parametrize("platform,ext", [("ios", "mlpackage.zip"), ("android", "tflite")])
+@pytest.mark.parametrize("platform,ext", [("ios", "mlpackage.zip"), ("android", "onnx")])
 def test_deploy_success_updates_latest(client, monkeypatch, platform, ext):
     exp = SimpleNamespace(experiment_id="exp-1")
     run = SimpleNamespace(info=SimpleNamespace(run_id="run-abc"))
@@ -64,4 +64,4 @@ def test_deploy_success_updates_latest(client, monkeypatch, platform, ext):
 def test_deploy_requires_version_field(client, monkeypatch):
     _install_fake_mlflow(monkeypatch, experiment=None, runs=[])
     resp = client.post("/api/v1/ios/deploy", json={})  # version 누락
-    assert resp.status_code == 422  # Pydantic 검증 실패
+    assert resp.status_code == 400  # Pydantic 검증 실패 — 팀 규약상 400 INVALID_REQUEST

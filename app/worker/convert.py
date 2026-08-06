@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # 모델 변환 — trainer.py의 4단계에서 호출. 학습된 PyTorch 모델을 온디바이스 포맷으로 바꾼다.
-#   iOS  → CoreML(.mlpackage),  Android → TFLite(.tflite)
+#   iOS  → CoreML(.mlpackage),  Android → ONNX(.onnx, 앱은 ONNX Runtime으로 로드)
 # 두 함수 모두 WrappedModel(정규화+softmax 내장)로 감싼 뒤 export → 앱은 raw IMU만 넣으면 됨.
 # ─────────────────────────────────────────────────────────────────────────────
 import os
@@ -44,12 +44,22 @@ def to_mlpackage(model: FitSetModel, mean: list, std: list, out_path: str) -> st
     )                                               # → '/tmp/FitSet.mlpackage.zip'
 
 
-def to_tflite(model: FitSetModel, mean: list, std: list, out_path: str):
-    """Android — TFLite 변환 (ai.edge.torch)"""
-    # 인자는 to_mlpackage와 동일. out_path=.tflite 파일 경로. 반환값 없음(파일로 떨굼).
-    import ai.edge.torch as edge_torch   # PyTorch→TFLite 변환 라이브러리(없으면 ImportError)
+def to_onnx(model: FitSetModel, mean: list, std: list, out_path: str):
+    """Android — ONNX 변환. 앱(ExerciseClassifier.kt)이 ONNX Runtime으로 로드한다.
+
+    입출력 계약은 iOS와 동일 — 입력 imu_window[1,200,6], 출력 probs.
+    (구 TFLite 경로는 ai-edge-torch가 TF 스택을 동반해 t3.small에서 못 돌아 폐기, ONNX로 대체.)
+    """
+    # 인자는 to_mlpackage와 동일. out_path=.onnx 파일 경로. 반환값 없음(파일로 떨굼).
+    import onnx   # noqa: F401 — torch.onnx.export가 요구(없으면 ImportError로 trainer가 건너뜀)
 
     wrapped = WrappedModel(model, mean, std).eval()   # 동일하게 정규화+softmax 감싸기
     example = torch.zeros(1, 200, 6)                   # 더미 입력
-    edge_model = edge_torch.convert(wrapped, (example,))   # 변환(샘플 입력은 튜플로 전달)
-    edge_model.export(out_path)                            # .tflite 파일로 저장
+    torch.onnx.export(
+        wrapped,
+        (example,),
+        out_path,
+        input_names=["imu_window"],    # 앱이 이 이름으로 텐서를 넣는다
+        output_names=["probs"],        # 확률 벡터(softmax 내장)
+        dynamo=False,                  # 레거시 exporter 고정 — 텐서 이름·그래프가 결정적
+    )

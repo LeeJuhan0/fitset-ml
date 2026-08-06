@@ -617,7 +617,12 @@ async function api(method, path, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.message || data.detail || JSON.stringify(data));
+  if (!res.ok) {
+    // 실패 봉투 {traceId, error: {code, message}} — 상태코드는 err.status로 별도 전달
+    const err = new Error(data.error?.message || data.detail || JSON.stringify(data));
+    err.status = res.status;
+    throw err;
+  }
   return data;
 }
 
@@ -892,7 +897,7 @@ async function loadModelInfo() {
       <div class="deployed-url">${data.modelUrl}</div>`;
   } catch(e) {
     deployedVersion = null;
-    el.innerHTML = `<p class="empty">${e.message.includes('404') ? '배포된 모델 없음' : e.message}</p>`;
+    el.innerHTML = `<p class="empty">${e.status === 404 ? '배포된 모델 없음' : e.message}</p>`;
   }
   renderRuns();   // 배포 배지가 최신 배포 버전을 따라가도록 재렌더
 }

@@ -48,8 +48,9 @@
 
 ## 3. 공통 응답 형식
 
-06. 명세 §3과 동일 — 성공은 `{success, code, message, data}` envelope, 오류는 FastAPI `{detail}`, 검증 오류는 `422`.
-(일부 조회 API는 `message` 필드가 생략된다 — 각 API 예시가 정본.)
+팀 공통 규약(ai-server·백엔드와 동일) — 성공은 `{traceId, data}`, 오류는 `{traceId, error: {code, message, details}}`.
+`traceId`는 요청 헤더 `X-Trace-Id`를 이어받거나 서버가 발급하며 응답 헤더로도 돌려준다.
+`error.code`는 상태코드에서 유도한 시맨틱 코드(400 INVALID_REQUEST, 404 NOT_FOUND 등), 검증 오류는 `422`가 아니라 `400 INVALID_REQUEST`다.
 
 ## 4. API 상세 명세
 
@@ -106,9 +107,7 @@
 
 ```json
 {
-  "success": true,
-  "code": "202",
-  "message": "학습을 시작했습니다.",
+  "traceId": "0a1b2c3d4e5f60718293a4b5c6d7e8f9",
   "data": {
     "jobId": "a1b2c3d4e5f64789a1b2c3d4e5f64789",
     "experimentId": "1",
@@ -129,12 +128,12 @@
 
 **오류 응답**
 
-| HTTP | 상황 | detail |
+| HTTP | 상황 | error.message |
 |------|------|--------|
 | 400 | files에 인덱스에 없는 파일 포함 | `존재하지 않는 파일: [...]` |
 | 409 | 동일 플랫폼 학습 진행 중 | `해당 플랫폼 학습이 이미 진행 중입니다.` |
 | 400 | platform이 ios/android 외 값 | `platform must be 'ios' or 'android'` |
-| 422 | files 필드 누락·타입 오류 | FastAPI 검증 오류 |
+| 400 | files 필드 누락·타입 오류 | INVALID_REQUEST (검증 오류) |
 
 ### 4.2 학습 진행률 조회
 
@@ -168,9 +167,7 @@
 
 ```json
 {
-  "success": true,
-  "code": "200",
-  "message": "학습 진행률을 조회했습니다.",
+  "traceId": "0a1b2c3d4e5f60718293a4b5c6d7e8f9",
   "data": {
     "status": "running",
     "experimentId": "1",
@@ -197,10 +194,10 @@
 
 **오류 응답**
 
-| HTTP | 상황 | detail |
+| HTTP | 상황 | error.message |
 |------|------|--------|
 | 404 | jobId에 해당하는 run 없음 | `해당 jobId의 작업이 없습니다.` |
-| 422 | jobId 쿼리 누락 | FastAPI 검증 오류 |
+| 400 | jobId 쿼리 누락 | INVALID_REQUEST (검증 오류) |
 
 ### 4.3 학습 이력 목록 조회
 
@@ -231,8 +228,7 @@ Path Parameter(`platform`) 외 없음.
 
 ```json
 {
-  "success": true,
-  "code": "200",
+  "traceId": "0a1b2c3d4e5f60718293a4b5c6d7e8f9",
   "data": {
     "runs": [
       {
@@ -274,7 +270,7 @@ Path Parameter(`platform`) 외 없음.
 
 **오류 응답**
 
-| HTTP | 상황 | detail |
+| HTTP | 상황 | error.message |
 |------|------|--------|
 | 400 | platform이 ios/android 외 값 | `platform must be 'ios' or 'android'` |
 
@@ -317,8 +313,7 @@ Path Parameter(`platform`) 외 없음.
 
 ```json
 {
-  "success": true,
-  "code": "200",
+  "traceId": "0a1b2c3d4e5f60718293a4b5c6d7e8f9",
   "data": {
     "metric": "val_loss",
     "history": [
@@ -339,7 +334,7 @@ Path Parameter(`platform`) 외 없음.
 
 **오류 응답**
 
-| HTTP | 상황 | detail |
+| HTTP | 상황 | error.message |
 |------|------|--------|
 | 400 | platform이 ios/android 외 값 | `platform must be 'ios' or 'android'` |
 
@@ -385,9 +380,7 @@ Path Parameter(`platform`) 외 없음.
 
 ```json
 {
-  "success": true,
-  "code": "200",
-  "message": "모델을 배포했습니다.",
+  "traceId": "0a1b2c3d4e5f60718293a4b5c6d7e8f9",
   "data": {
     "deployedVersion": "v1.3",
     "platform": "ios",
@@ -406,11 +399,11 @@ Path Parameter(`platform`) 외 없음.
 
 **오류 응답**
 
-| HTTP | 상황 | detail |
+| HTTP | 상황 | error.message |
 |------|------|--------|
 | 404 | 플랫폼에 학습 이력 자체가 없음 | `학습 이력이 없습니다.` |
 | 404 | 해당 버전의 run 없음 | `버전 {version}의 학습 결과가 없습니다.` |
-| 422 | version 필드 누락 | FastAPI 검증 오류 |
+| 400 | version 필드 누락 | INVALID_REQUEST (검증 오류) |
 
 ### 4.6 최신 모델 조회 (앱 폴링)
 
@@ -447,9 +440,7 @@ Path Parameter(`platform`) 외 없음.
 
 ```json
 {
-  "success": true,
-  "code": "200",
-  "message": "최신 모델 버전을 조회했습니다.",
+  "traceId": "0a1b2c3d4e5f60718293a4b5c6d7e8f9",
   "data": {
     "latestVersion": "v1.3",
     "modelUrl": "https://fitset-models.s3.ap-northeast-2.amazonaws.com/ios/v1.3/FitSet.mlpackage.zip?X-Amz-...",
@@ -468,7 +459,7 @@ Path Parameter(`platform`) 외 없음.
 
 **오류 응답**
 
-| HTTP | 상황 | detail |
+| HTTP | 상황 | error.message |
 |------|------|--------|
 | 404 | 배포된 모델이 없음 (최초 배포 전) | `배포된 모델이 없습니다.` |
 | 400 | platform이 ios/android 외 값 | `platform must be 'ios' or 'android'` |
@@ -503,9 +494,7 @@ Path Parameter(`platform`) 외 없음.
 
 ```json
 {
-  "success": true,
-  "code": "200",
-  "message": "버전 분포를 조회했습니다.",
+  "traceId": "0a1b2c3d4e5f60718293a4b5c6d7e8f9",
   "data": {
     "latestVersion": "v1.3",
     "totalReports": 50,
@@ -529,7 +518,7 @@ Path Parameter(`platform`) 외 없음.
 
 **오류 응답**
 
-| HTTP | 상황 | detail |
+| HTTP | 상황 | error.message |
 |------|------|--------|
 | 400 | platform이 ios/android 외 값 | `platform must be 'ios' or 'android'` |
 
@@ -554,5 +543,5 @@ ML 서버는 오류 코드 문자열 체계 없이 **HTTP 상태 + detail 메시
 | 400 | platform 불일치 / 존재하지 않는 학습 파일 지정 |
 | 404 | jobId 없음 / 학습 이력 없음 / 해당 버전 run 없음 / 배포된 모델 없음 |
 | 409 | 동일 플랫폼 학습 중복 시작 |
-| 422 | 필수 파라미터·필드 누락, 타입 불일치 (FastAPI 검증) |
+| 400 | 필수 파라미터·필드 누락, 타입 불일치 (INVALID_REQUEST) |
 | 500 | MLflow·S3 접근 실패 등 서버 내부 오류 |

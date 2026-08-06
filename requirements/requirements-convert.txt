@@ -5,7 +5,6 @@
 # iOS — CoreML (비교적 가벼움 → 단일 박스에서 동작 가능)
 coremltools
 
-# Android — TFLite: ai-edge-torch가 TensorFlow·JAX·Keras 스택을 동반해 매우 무겁다.
-# t3.small(2GB RAM / 30GB)에선 디스크·RAM 부족으로 보류(No space left on device).
-# Android 변환 활성화 시 인스턴스 증설 후 아래 주석 해제.
-# ai-edge-torch
+# Android — ONNX (torch.onnx.export가 요구). 가벼워서 t3.small에서 동작.
+# 구 TFLite 경로(ai-edge-torch)는 TF 스택 동반으로 t3.small에서 못 돌아 폐기 — ONNX Runtime으로 대체.
+onnx
