@@ -12,6 +12,7 @@ pandas
 scikit-learn
 pydantic-settings
 python-multipart
+httpx          # MLflow UI 역프록시(app/mlflow_proxy.py)의 중계 클라이언트
 
 # 모델 변환 의존성(coremltools / ai-edge-torch)은 TF·JAX·CUDA 스택을 동반해 매우 무겁다.
 # CI·웹에는 불필요(테스트는 가짜 주입)하므로 requirements-convert.txt 로 분리.

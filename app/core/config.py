@@ -8,7 +8,8 @@ class Settings(BaseSettings):
     # 아래 각 필드는 "기본값"이며, 같은 이름의 환경변수(.env)가 있으면 그 값으로 대체된다.
     # MLflow — ADR-0017: EC2 온디맨드 + EBS SQLite
     # EC2에서 MLflow 서버가 sqlite:////mlflow/mlflow.db 로 뜨면 이 URI를 사용
-    mlflow_tracking_uri: str = "http://localhost:5001"        # MlflowClient/start_run이 접속할 추적 서버 주소
+    # 서버가 --static-prefix /mlflow 로 뜨므로 REST API도 그 경로 아래에 있다
+    mlflow_tracking_uri: str = "http://localhost:5001/mlflow"  # MlflowClient/start_run이 접속할 추적 서버 주소
     mlflow_artifact_root: str = "s3://fitset-models/mlflow"   # log_model 등 아티팩트가 저장될 루트(S3)
 
     # S3 버킷 — ADR-0015: raw data / model artifact 분리
@@ -20,6 +21,11 @@ class Settings(BaseSettings):
 
     # 클래스 번호와 운동 slug 매핑 테이블(공개 CDN, GET /model/latest 의 metaUrl 로 내려감)
     class_mapping_url: str = "https://dtcevtkuvdwt9.cloudfront.net/models/class-mapping.json"
+
+    # MLflow UI 프록시(app/mlflow_proxy.py) — /mlflow/* 를 이 대상으로 중계
+    mlflow_proxy_target: str = "http://localhost:5001"   # 원 서버 주소(경로 프리픽스 없이)
+    mlflow_ui_user: str = ""       # Basic 인증 계정 — 둘 중 하나라도 비면 프록시 잠금(fail closed)
+    mlflow_ui_password: str = ""
 
     class Config:
         env_file = ".env"                      # 오버라이드 값을 읽어올 파일 경로

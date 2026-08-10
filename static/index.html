@@ -545,11 +545,11 @@
 </div>
 
 <script>
-// 대시보드가 열린 호스트 기준으로 같은 서버의 MLflow(:5001)를 가리킨다 (IP/도메인 바뀌어도 자동).
-const MLFLOW = location.protocol + '//' + location.hostname + ':5001';
-document.getElementById('mlflowHomeBtn').href = MLFLOW;
-document.getElementById('navMlflow').href = MLFLOW;
-document.getElementById('kpiMlflowLink').href = MLFLOW;
+// 대시보드와 같은 오리진의 /mlflow 경로를 가리킨다. ALB가 이 경로를 MLflow 컨테이너로 넘긴다.
+const MLFLOW = location.origin + '/mlflow';
+document.getElementById('mlflowHomeBtn').href = MLFLOW + '/';
+document.getElementById('navMlflow').href = MLFLOW + '/';
+document.getElementById('kpiMlflowLink').href = MLFLOW + '/';
 const PASSWORD = '열려라 참깨';
 
 function unlock() {

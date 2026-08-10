@@ -19,6 +19,7 @@ from app.core.schemas import ErrorResponse                  # 실패 응답 스�
 from app.data.router import router as data_router          # GET /data, /data/presigned-url, POST /data/upload-confirm
 from app.training.router import router as train_router     # POST /train, GET /train/status, /runs, /runs/{id}/history
 from app.deployment.router import router as deploy_router  # POST /deploy, GET /model/latest, /model/version-stats
+from app.mlflow_proxy import router as mlflow_proxy_router  # /mlflow/* — Basic 인증 뒤 MLflow(5001) 단건 중계
 
 logger = logging.getLogger("fitset-ml")
 
@@ -66,15 +67,17 @@ def _error_response(
     code: str,
     message: str,
     details: list | None = None,
+    extra_headers: dict | None = None,
 ) -> JSONResponse:
     # 실패 응답 JSON 조립 — traceId는 미들웨어가 state에 넣은 값을 그대로 쓴다.
     # X-Trace-Id 헤더도 여기서 직접 싣는다 — 처리되지 않은 500은 Starlette의
     # ServerErrorMiddleware가 사용자 미들웨어 바깥에서 응답을 만들어, 미들웨어의
     # 헤더 부착이 건너뛰어지기 때문(트레이싱이 가장 필요한 케이스라 핸들러에서 보장).
+    # extra_headers: 예외가 실어 보낸 헤더(WWW-Authenticate 등) 보존용.
     trace_id = getattr(request.state, "trace_id", "")
     return JSONResponse(
         status_code=status_code,
-        headers={TRACE_ID_HEADER: trace_id},
+        headers={TRACE_ID_HEADER: trace_id, **(extra_headers or {})},
         content={
             "traceId": trace_id,
             "error": {"code": code, "message": message, "details": details or []},
@@ -86,6 +89,7 @@ def _error_response(
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     # 서비스/라우터가 던진 HTTPException(400/404/409...)과 라우트 없음(404)을 실패 응답으로 변환.
     # detail이 {code, message} dict면 시맨틱 코드를 그대로 쓴다(ai-server와 동일 규칙).
+    extra_headers = getattr(exc, "headers", None)
     if isinstance(exc.detail, dict) and "code" in exc.detail:
         return _error_response(
             request,
@@ -93,9 +97,10 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
             exc.detail["code"],
             exc.detail.get("message", ""),
             exc.detail.get("details"),
+            extra_headers,
         )
     code = _DEFAULT_ERROR_CODES.get(exc.status_code, _FALLBACK_ERROR_CODE)
-    return _error_response(request, exc.status_code, code, str(exc.detail))
+    return _error_response(request, exc.status_code, code, str(exc.detail), None, extra_headers)
 
 
 @app.exception_handler(RequestValidationError)
@@ -138,6 +143,7 @@ _ERROR_DOC = {"default": {"model": ErrorResponse, "description": "실패 — {tr
 app.include_router(data_router, responses=_ERROR_DOC)
 app.include_router(train_router, responses=_ERROR_DOC)
 app.include_router(deploy_router, responses=_ERROR_DOC)
+app.include_router(mlflow_proxy_router)   # /mlflow/* — 문서 비노출, "/" 정적 마운트보다 먼저
 
 # mount("/", StaticFiles(...)) : 루트 경로에 정적 파일 서버를 붙임 → static/ 의 대시보드(HTML/JS) 서빙.
 #   directory="static": 서빙할 폴더, html=True: 디렉토리 요청 시 index.html 반환.

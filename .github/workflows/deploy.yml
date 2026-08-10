@@ -113,13 +113,15 @@ jobs:
             --exclude='__pycache__' \
             ./ "$EC2_INSTANCE_ID":/app/
 
-      - name: Inject MLflow allowed-hosts & CORS origins
+      - name: Inject MLflow env (allowed-hosts, CORS, UI Basic auth)
         run: |
           # compose가 자동 로드하는 /app/.env 주입.
-          # 프라이빗 서브넷이라 MLflow UI는 SSM 포트포워딩으로 localhost:5001 접속 →
-          # allowed-hosts/CORS도 localhost 기준. rsync(--delete) 이후에 생성해야 살아남는다.
+          # MLflow UI는 FastAPI 역프록시(/mlflow/*, Basic 인증)를 거쳐 admin 도메인에 노출된다.
+          # 프록시가 Host를 mlflow:5001로 다시 쓰므로 allowed-hosts의 admin 항목은 방어용,
+          # SSM 포트포워딩 경로도 계속 쓰이므로 localhost 항목은 남긴다.
+          # rsync(--delete) 이후에 생성해야 살아남는다.
           ssh "$EC2_INSTANCE_ID" \
-            "printf 'EC2_ALLOWED_HOST=%s\nEC2_CORS_ORIGINS=%s\n' 'localhost:5001,127.0.0.1:5001' 'http://localhost:5001,http://127.0.0.1:5001' | sudo tee /app/.env >/dev/null"
+            "printf 'EC2_ALLOWED_HOST=%s\nEC2_CORS_ORIGINS=%s\nMLFLOW_UI_USER=%s\nMLFLOW_UI_PASSWORD=%s\n' 'localhost:5001,127.0.0.1:5001,admin.fitset.kro.kr' 'http://localhost:5001,http://127.0.0.1:5001,https://admin.fitset.kro.kr' '${{ secrets.MLFLOW_UI_USER }}' '${{ secrets.MLFLOW_UI_PASSWORD }}' | sudo tee /app/.env >/dev/null"
 
       - name: Build & start containers
         run: |
