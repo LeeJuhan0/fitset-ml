@@ -32,9 +32,15 @@ _client: httpx.AsyncClient | None = None
 
 def _get_client() -> httpx.AsyncClient:
     # 프록시 공용 커넥션 풀을 첫 요청 때 만든다(테스트에서 모듈 변수로 대체 가능)
+    # keepalive_expiry는 MLflow(gunicorn)의 유휴 커넥션 종료(기본 2초)보다 짧아야 한다 —
+    # 길면 상대가 이미 끊은 커넥션을 재사용하다 RemoteProtocolError 500이 난다(운영 실측)
     global _client
     if _client is None:
-        _client = httpx.AsyncClient(base_url=settings.mlflow_proxy_target, timeout=30.0)
+        _client = httpx.AsyncClient(
+            base_url=settings.mlflow_proxy_target,
+            timeout=30.0,
+            limits=httpx.Limits(keepalive_expiry=1.0),
+        )
     return _client
 
 
@@ -56,10 +62,36 @@ def check_basic_auth(credentials: HTTPBasicCredentials = Depends(basic_scheme)) 
     )
 
 
+async def _relay(request: Request, upstream_path: str) -> Response:
+    # 요청을 원 서버에 보내고 응답 전체를 받아 되돌린다. 본문을 미리 버퍼링해 두므로
+    # 유휴로 끊긴 커넥션에 걸렸을 때(RemoteProtocolError) 새 커넥션으로 1회 재시도가 안전하다
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in _DROP_REQUEST_HEADERS}
+    body = await request.body()
+    url = httpx.URL(path=upstream_path, query=request.url.query.encode())
+    try:
+        upstream = await _get_client().request(request.method, url, headers=headers, content=body)
+    except httpx.RemoteProtocolError:
+        upstream = await _get_client().request(request.method, url, headers=headers, content=body)
+    response_headers = {k: v for k, v in upstream.headers.items() if k.lower() not in _DROP_RESPONSE_HEADERS}
+    return Response(content=upstream.content, status_code=upstream.status_code, headers=response_headers)
+
+
 @router.get("/mlflow", dependencies=[Depends(check_basic_auth)], include_in_schema=False)
 def mlflow_root_redirect() -> RedirectResponse:
     # 슬래시 없는 진입을 UI 루트로 보정
     return RedirectResponse(url="/mlflow/")
+
+
+@router.api_route(
+    "/graphql",
+    methods=["GET", "POST"],
+    dependencies=[Depends(check_basic_auth)],
+    include_in_schema=False,
+)
+async def graphql_passthrough(request: Request) -> Response:
+    # MLflow 3.x UI 일부(genai 화면)가 static-prefix를 무시하고 /graphql 을 부른다 —
+    # 프리픽스를 붙여 원 서버의 /mlflow/graphql 로 넘긴다
+    return await _relay(request, "/mlflow/graphql")
 
 
 @router.api_route(
@@ -69,12 +101,4 @@ def mlflow_root_redirect() -> RedirectResponse:
     include_in_schema=False,
 )
 async def mlflow_proxy(request: Request, path: str) -> Response:
-    # 요청을 그대로 원 서버에 보내고 응답 전체를 받아 되돌린다
-    upstream = await _get_client().request(
-        request.method,
-        httpx.URL(path=f"/mlflow/{path}", query=request.url.query.encode()),
-        headers={k: v for k, v in request.headers.items() if k.lower() not in _DROP_REQUEST_HEADERS},
-        content=await request.body(),
-    )
-    headers = {k: v for k, v in upstream.headers.items() if k.lower() not in _DROP_RESPONSE_HEADERS}
-    return Response(content=upstream.content, status_code=upstream.status_code, headers=headers)
+    return await _relay(request, f"/mlflow/{path}")

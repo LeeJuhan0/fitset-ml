@@ -103,3 +103,32 @@ def test_슬래시_없는_진입은_리다이렉트(client, creds):
     res = client.get("/mlflow", headers=_basic_header("mlops", "secret"), follow_redirects=False)
     assert res.status_code == 307
     assert res.headers["location"] == "/mlflow/"
+
+
+def test_프리픽스_없는_graphql도_인증_후_중계(client, creds, upstream):
+    # MLflow 3.x UI 일부(genai 화면)가 /graphql 을 프리픽스 없이 부른다 — 405로 떨어지면 안 됨
+    res = client.post("/graphql", headers=_basic_header("mlops", "secret"), json={"query": "{ __typename }"})
+    assert res.status_code == 200
+    assert upstream.last_kwargs["url"].path == "/mlflow/graphql"
+
+
+def test_프리픽스_없는_graphql도_인증은_필수(client, creds):
+    res = client.post("/graphql", json={"query": "{ __typename }"})
+    assert res.status_code == 401
+
+
+def test_끊긴_커넥션은_한_번_재시도(client, creds, monkeypatch):
+    # 첫 시도에서 RemoteProtocolError(유휴로 끊긴 keep-alive), 재시도는 성공하는 상황
+    stub = _StubUpstream()
+    calls = {"n": 0}
+
+    async def flaky_request(method, url, headers=None, content=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+        return await stub.request(method, url, headers=headers, content=content)
+
+    monkeypatch.setattr(mlflow_proxy, "_client", type("C", (), {"request": staticmethod(flaky_request)})())
+    res = client.get("/mlflow/", headers=_basic_header("mlops", "secret"))
+    assert res.status_code == 200
+    assert calls["n"] == 2
