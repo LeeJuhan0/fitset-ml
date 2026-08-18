@@ -22,7 +22,7 @@ def list_model_versions(platform: str) -> list[str]:
             name = prefix["Prefix"].rstrip("/").split("/")[-1]   # 마지막 경로 조각(폴더명)
             if re.match(r"v\d+\.\d+", name):                 # v숫자.숫자 형태만
                 versions.append(name)
-    return sorted(versions)     # 오름차순(문자열 정렬)
+    return sorted(versions, key=domain.version_key)     # 오름차순(숫자 정렬 — v1.9 < v1.10)
 
 
 def next_version(platform: str) -> str:

@@ -28,10 +28,12 @@ def start_training(platform: str, files: list[str], epochs: int, lr: float) -> d
         raise HTTPException(status_code=409, detail="해당 플랫폼 학습이 이미 진행 중입니다.")
 
     index = get_index(platform)                          # 등록된 파일 목록
-    valid = {f["filename"] for f in index["files"]}      # 유효 파일명 집합
-    invalid = [f for f in files if f not in valid]       # 요청 중 인덱스에 없는 파일
+    # presigned URL만 받고 S3 PUT을 안 한 예약 엔트리(uploaded=false)는 실물이 없어
+    # 워커가 다운로드 404로 죽는다 → 업로드 확정된 파일만 학습 대상으로 인정한다.
+    valid = {f["filename"] for f in index["files"] if f.get("uploaded", True)}
+    invalid = [f for f in files if f not in valid]       # 인덱스에 없거나 업로드가 안 끝난 파일
     if invalid:
-        raise HTTPException(status_code=400, detail=f"존재하지 않는 파일: {invalid}")
+        raise HTTPException(status_code=400, detail=f"학습할 수 없는 파일(미등록 또는 업로드 미완료): {invalid}")
 
     version = next_version(platform)                     # 이번 학습 산출물 버전(예: v1.3)
 

@@ -765,15 +765,21 @@ function toggleFile(el, name) {
 }
 
 // 전체선택: 현재 필터·검색으로 보이는 파일들(모든 페이지)을 선택/해제
+// 업로드 대기(uploaded=false)는 S3에 실물이 없어 학습이 400으로 막히므로 제외한다.
 function toggleSelectAll(checked) {
-  visibleFiles().forEach(f =>
+  selectableFiles().forEach(f =>
     checked ? selectedFiles.add(f.filename) : selectedFiles.delete(f.filename));
   renderFiles();
 }
 
+// 보이는 파일 중 학습에 넣을 수 있는 것만
+function selectableFiles() {
+  return visibleFiles().filter(f => f.uploaded !== false);
+}
+
 function updateSelectCount() {
   document.getElementById('selectCount').textContent = `${selectedFiles.size}개 선택됨`;
-  const files = visibleFiles();
+  const files = selectableFiles();
   const all = document.getElementById('selectAll');
   if (all) all.checked = files.length > 0 && files.every(f => selectedFiles.has(f.filename));
 }

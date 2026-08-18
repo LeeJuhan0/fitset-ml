@@ -7,14 +7,23 @@
 STATUS_MAP = {"RUNNING": "running", "FINISHED": "completed", "FAILED": "failed"}
 
 
-def bump_version(versions: list[str]) -> str:
-    """버전 채번 규칙: 마지막 버전의 minor +1, 없으면 v1.0.
+def version_key(version: str) -> tuple[int, int]:
+    """버전 비교 규칙: v{major}.{minor}를 숫자쌍으로 본다.
 
-    versions는 오름차순 정렬된 v{major}.{minor} 문자열 목록.
+    문자열 정렬은 "v1.10" < "v1.2" < "v1.9" 라서 최신 버전을 못 고른다.
+    """
+    major, minor = version[1:].split(".")
+    return int(major), int(minor)
+
+
+def bump_version(versions: list[str]) -> str:
+    """버전 채번 규칙: 최신 버전의 minor +1, 없으면 v1.0.
+
+    versions는 v{major}.{minor} 문자열 목록. 정렬 여부와 무관하게 숫자로 최신을 고른다.
     """
     if not versions:
         return "v1.0"           # 첫 버전
-    major, minor = map(int, versions[-1][1:].split("."))   # "v1.3" → (1, 3)
+    major, minor = version_key(max(versions, key=version_key))   # "v1.10" → (1, 10)
     return f"v{major}.{minor + 1}"   # minor +1
 
 

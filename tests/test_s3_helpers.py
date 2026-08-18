@@ -140,6 +140,12 @@ def test_next_version_uses_latest_sorted(monkeypatch):
     assert train_repo.next_version("android") == "v1.10"
 
 
+def test_next_version_compares_minor_numerically(monkeypatch):
+    # 문자열 정렬이면 최신을 v1.9로 보고 v1.10을 다시 채번해 배포본을 덮어쓴다.
+    monkeypatch.setattr(train_repo, "list_model_versions", lambda p: ["v1.0", "v1.9", "v1.10"])
+    assert train_repo.next_version("android") == "v1.11"
+
+
 class _FakePaginator:
     def __init__(self, prefixes):
         self._prefixes = prefixes

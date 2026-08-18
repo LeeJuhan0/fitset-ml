@@ -36,6 +36,17 @@ def test_train_400_on_unknown_file(client, monkeypatch):
     assert "ghost.csv" in resp.json()["error"]["message"]
 
 
+def test_train_400_on_not_uploaded_file(client, monkeypatch):
+    # presigned URL만 받고 업로드를 안 끝낸 예약 엔트리 — S3에 실물이 없어 워커가 404로 죽는다.
+    monkeypatch.setattr(train_mod, "get_index", lambda p: {"files": [
+        {"filename": "a.csv", "uploaded": True},
+        {"filename": "pending.csv", "uploaded": False},
+    ]})
+    resp = client.post("/api/v1/ios/train", json={"files": ["a.csv", "pending.csv"]})
+    assert resp.status_code == 400
+    assert "pending.csv" in resp.json()["error"]["message"]
+
+
 def test_train_409_when_already_running(client):
     busy = MagicMock()
     busy.poll.return_value = None  # 아직 실행 중
