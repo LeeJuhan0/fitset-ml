@@ -31,6 +31,8 @@ def test_key_builders():
     assert s3._csv_key("android", "SQUAT", "a.csv") == "android/raw/SQUAT/a.csv"
     assert s3._model_key("ios", "v1.3", "FitSet.mlpackage") == "ios/v1.3/FitSet.mlpackage"
     assert s3._latest_key("android") == "android/latest.json"
+    assert s3._uploads_index_key("ios") == "ios/uploads-index.json"
+    assert s3._upload_csv_key("ios", "user1", "SQUAT_user1_0001.csv") == "ios/user1/SQUAT_user1_0001.csv"
 
 
 # ── latest.json 캐시 ─────────────────────────────────────────────────────────

@@ -38,14 +38,14 @@ def _install(monkeypatch, experiment, search_results=None, history=None):
     return fake_client
 
 
-def test_runs_empty_when_no_experiment(client, monkeypatch):
+def test_runs_empty_when_no_experiment(admin_client, monkeypatch):
     _install(monkeypatch, experiment=None)
-    resp = client.get("/api/v1/ios/runs")
+    resp = admin_client.get("/api/admin/v1/ios/runs")
     assert resp.status_code == 200
     assert resp.json()["data"]["runs"] == []
 
 
-def test_runs_lists_and_picks_best(client, monkeypatch):
+def test_runs_lists_and_picks_best(admin_client, monkeypatch):
     exp = SimpleNamespace(experiment_id="exp-1")
     runs = [
         _run("run-1", "v1.0", "FINISHED", val_acc=0.80),
@@ -54,7 +54,7 @@ def test_runs_lists_and_picks_best(client, monkeypatch):
     ]
     _install(monkeypatch, experiment=exp, search_results=runs)
 
-    data = client.get("/api/v1/ios/runs").json()["data"]
+    data = admin_client.get("/api/admin/v1/ios/runs").json()["data"]
     assert len(data["runs"]) == 3
     assert data["bestRunId"] == "run-2"
 
@@ -64,11 +64,11 @@ def test_runs_lists_and_picks_best(client, monkeypatch):
     assert first["duration"] == 3  # (4000-1000)/1000
 
 
-def test_runs_metric_history(client, monkeypatch):
+def test_runs_metric_history(admin_client, monkeypatch):
     history = [SimpleNamespace(step=i, value=0.5 - i * 0.1) for i in range(3)]
     _install(monkeypatch, experiment=SimpleNamespace(experiment_id="e"), history=history)
 
-    data = client.get("/api/v1/ios/runs/run-1/history?metric=val_loss").json()["data"]
+    data = admin_client.get("/api/admin/v1/ios/runs/run-1/history?metric=val_loss").json()["data"]
     assert data["metric"] == "val_loss"
     assert [h["step"] for h in data["history"]] == [0, 1, 2]
     assert [h["value"] for h in data["history"]] == pytest.approx([0.5, 0.4, 0.3])

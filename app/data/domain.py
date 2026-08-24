@@ -6,8 +6,8 @@ import re
 
 from app.core.config import CLASSES   # 허용 종목 목록 (설정 상수 — I/O 아님)
 
-# deviceId는 S3 키에 들어가므로 경로 조작/이상문자 차단 — 영숫자·_·-, 1~64자만 허용
-DEVICE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+# deviceId·userId는 S3 키에 들어가므로 경로 조작/이상문자 차단 — 영숫자·_·-, 1~64자만 허용
+SAFE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def is_supported_class(class_name: str) -> bool:
@@ -16,27 +16,33 @@ def is_supported_class(class_name: str) -> bool:
 
 
 def is_valid_device_id(device_id: str) -> bool:
-    return bool(DEVICE_ID_RE.match(device_id))
+    return bool(SAFE_ID_RE.match(device_id))
 
 
-def make_filename(class_name: str, device_id: str, seq: int) -> str:
-    # 파일명 규칙: {CLASS}_{deviceId}_{NNNN}.csv (순번 4자리)
-    return f"{class_name}_{device_id}_{seq:04d}.csv"
+def is_valid_user_id(user_id: str) -> bool:
+    # 토큰 sub가 S3 키 prefix로 들어간다 — 백엔드 발급이라도 형식은 방어
+    return bool(SAFE_ID_RE.match(user_id))
 
 
-def next_filename(files: list[dict], class_name: str, device_id: str) -> str:
-    """인덱스의 기존 파일 목록을 보고 다음 파일명을 정한다 (순수 계산).
+def make_filename(class_name: str, owner_id: str, seq: int) -> str:
+    # 파일명 규칙: {CLASS}_{ownerId}_{NNNN}.csv (순번 4자리) — 유저 수집은 userId가 주인
+    return f"{class_name}_{owner_id}_{seq:04d}.csv"
 
-    같은 class+deviceId 파일 개수 + 1 = 다음 순번. 이미 존재하는 이름과
+
+def next_filename(entries: list[dict], class_name: str, owner_id: str, *, owner_field: str = "userId") -> str:
+    """대장의 기존 항목을 보고 다음 파일명을 정한다 (순수 계산).
+
+    같은 class+주인(owner) 항목 개수 + 1 = 다음 순번. 이미 존재하는 이름과
     겹치면(삭제로 생긴 구멍 등) 순번을 올려 충돌을 피한다.
+    owner_field: 채번 주인을 담는 키 — 유저 업로드 대장은 "userId", 구 인덱스는 "deviceId".
     """
-    existing = {f["filename"] for f in files}
+    existing = {f["filename"] for f in entries}
     seq = sum(
-        1 for f in files
-        if f.get("class") == class_name and f.get("deviceId") == device_id
+        1 for f in entries
+        if f.get("class") == class_name and f.get(owner_field) == owner_id
     ) + 1
-    filename = make_filename(class_name, device_id, seq)
+    filename = make_filename(class_name, owner_id, seq)
     while filename in existing:  # 구멍/중복 방지
         seq += 1
-        filename = make_filename(class_name, device_id, seq)
+        filename = make_filename(class_name, owner_id, seq)
     return filename

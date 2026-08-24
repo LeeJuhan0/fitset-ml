@@ -5,17 +5,14 @@
 # 응답은 통째로 받아 되돌리는 단건 방식 — UI·API 응답은 수 MB 이하라 스트리밍 불필요,
 # 대용량 아티팩트는 이 경로가 아니라 S3/SSM으로 받는다.
 # ─────────────────────────────────────────────────────────────────────────────
-import secrets
-
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import RedirectResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from app.core.config import settings
+from app.core.security import check_basic_auth   # 어드민 공용 Basic 인증(core로 승격)
 
 router = APIRouter()
-basic_scheme = HTTPBasic()   # Authorization: Basic 헤더 파싱, 없으면 401 + 브라우저 로그인창
 
 # 중계에서 제거할 헤더 — hop-by-hop 헤더와, httpx가 압축을 이미 풀어 실제 본문과
 # 어긋나게 되는 content-encoding/length (그대로 두면 브라우저가 이중 해제·길이 불일치)
@@ -42,24 +39,6 @@ def _get_client() -> httpx.AsyncClient:
             limits=httpx.Limits(keepalive_expiry=1.0),
         )
     return _client
-
-
-def check_basic_auth(credentials: HTTPBasicCredentials = Depends(basic_scheme)) -> None:
-    # 자격 미설정이면 잠금(fail closed), 불일치면 401로 재입력 유도
-    if not settings.mlflow_ui_user or not settings.mlflow_ui_password:
-        raise HTTPException(
-            status_code=503,
-            detail={"code": "MLFLOW_UI_LOCKED", "message": "MLflow UI 자격증명이 설정되지 않았습니다."},
-        )
-    user_ok = secrets.compare_digest(credentials.username.encode(), settings.mlflow_ui_user.encode())
-    password_ok = secrets.compare_digest(credentials.password.encode(), settings.mlflow_ui_password.encode())
-    if user_ok and password_ok:
-        return
-    raise HTTPException(
-        status_code=401,
-        detail={"code": "UNAUTHORIZED", "message": "MLflow UI 인증에 실패했습니다."},
-        headers={"WWW-Authenticate": 'Basic realm="MLflow"'},
-    )
 
 
 async def _relay(request: Request, upstream_path: str) -> Response:

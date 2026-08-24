@@ -68,7 +68,7 @@ def test_자격증명_미설정이면_503_잠금(client, monkeypatch):
     monkeypatch.setattr(settings, "mlflow_ui_password", "")
     res = client.get("/mlflow/", headers=_basic_header("anyone", "anything"))
     assert res.status_code == 503
-    assert res.json()["error"]["code"] == "MLFLOW_UI_LOCKED"
+    assert res.json()["error"]["code"] == "ADMIN_AUTH_LOCKED"
 
 
 def test_정상_인증이면_원서버_응답을_중계(client, creds, upstream):

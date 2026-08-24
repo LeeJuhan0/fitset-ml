@@ -34,6 +34,13 @@ def _client():
 def _index_key(platform: str) -> str:
     return f"{platform}/index.json"                       # 예: ios/index.json
 
+def _uploads_index_key(platform: str) -> str:
+    return f"{platform}/uploads-index.json"               # 유저 업로드 대장 (uploads 버킷)
+
+def _upload_csv_key(platform: str, user_id: str, filename: str) -> str:
+    # 유저별 prefix — 동의 철회 시 {platform}/{userId}/ 삭제로 정리 가능
+    return f"{platform}/{user_id}/{filename}"             # 예: ios/user-1/SQUAT_user-1_0001.csv
+
 def _csv_key(platform: str, class_name: str, filename: str) -> str:
     return f"{platform}/raw/{class_name}/{filename}"      # 예: ios/raw/SQUAT/SQUAT_xx_0001.csv
 
@@ -44,31 +51,22 @@ def _latest_key(platform: str) -> str:
     return f"{platform}/latest.json"                      # 예: ios/latest.json
 
 
-# ── index.json 엔진 ──────────────────────────────────────────────────────────
+# ── JSON 대장 엔진 — 학습 인덱스(index.json)와 업로드 대장(uploads-index.json)이 공유 ──
 
-def _get_index_with_etag(platform: str) -> tuple[dict, str | None]:
-    """index.json 본문과 ETag를 함께 읽는다. 없으면 (빈 인덱스, None)."""
+def _get_json_with_etag(bucket: str, key: str, empty: dict) -> tuple[dict, str | None]:
+    """JSON 객체 본문과 ETag를 함께 읽는다. 없으면 (empty, None)."""
     # ETag = S3 객체의 버전 지문. 조건부 쓰기에서 "내가 읽은 그 버전 그대로인가" 확인에 쓴다.
     try:
-        obj = _client().get_object(           # S3 GetObject
-            Bucket=settings.raw_data_bucket,
-            Key=_index_key(platform),
-        )
+        obj = _client().get_object(Bucket=bucket, Key=key)   # S3 GetObject
         return json.loads(obj["Body"].read()), obj["ETag"]   # (본문 dict, ETag)
     except ClientError as e:
         if e.response["Error"]["Code"] == "NoSuchKey":       # 아직 파일이 없으면
-            return {"platform": platform, "files": []}, None # 빈 인덱스 반환
+            return empty, None                               # 빈 대장 반환
         raise
 
 
-def get_index(platform: str) -> dict:
-    # 외부에 공개된 단순 조회(ETag 버림). data·training 도메인이 사용.
-    data, _ = _get_index_with_etag(platform)
-    return data
-
-
-def put_index(platform: str, data: dict, *, etag: str):
-    """index.json을 조건부 저장한다 (update_index 전용 내부 헬퍼).
+def _put_json(bucket: str, key: str, data: dict, *, etag: str | None):
+    """JSON 객체를 조건부 저장한다 (_update_json 전용 내부 헬퍼).
 
     etag 있음  → IfMatch:    읽은 이후 다른 요청이 바꿨으면 412로 실패
     etag None  → IfNoneMatch: 그사이 다른 요청이 새로 만들었으면 412로 실패
@@ -77,39 +75,75 @@ def put_index(platform: str, data: dict, *, etag: str):
     extra = {"IfMatch": etag} if etag is not None else {"IfNoneMatch": "*"}
 
     _client().put_object(                     # S3 PutObject(조건부)
-        Bucket=settings.raw_data_bucket,
-        Key=_index_key(platform),
+        Bucket=bucket,
+        Key=key,
         Body=json.dumps(data, ensure_ascii=False, indent=2),   # dict → JSON 바이트
         ContentType="application/json",
         **extra,                              # 조건 헤더 펼치기
     )
 
 
-def update_index(platform: str, mutate: Callable[[dict], None]) -> dict:
-    """index.json을 원자적으로 read-modify-write 한다.
+def _update_json(bucket: str, key: str, empty: dict, mutate: Callable[[dict], None]) -> dict:
+    """JSON 대장을 원자적으로 read-modify-write 한다.
 
-    여러 요청이 동시에 같은 플랫폼 인덱스를 갱신해도 lost update가 나지 않도록,
-    ETag 기반 조건부 쓰기로 보호한다. 그사이 다른 요청이 인덱스를 바꿔 쓰기가
-    거부되면(412/409), 최신본을 다시 읽어 mutate를 재적용하고 재시도한다.
+    여러 요청이 동시에 같은 대장을 갱신해도 lost update가 나지 않도록 ETag 기반
+    조건부 쓰기로 보호한다. 그사이 다른 요청이 대장을 바꿔 쓰기가 거부되면(412/409),
+    최신본을 다시 읽어 mutate를 재적용하고 재시도한다.
 
-    mutate(index)는 index dict를 제자리(in-place)에서 변경하는 콜백.
+    mutate(data)는 dict를 제자리(in-place)에서 변경하는 콜백.
     """
-    # mutate: 호출자가 넘기는 "인덱스를 어떻게 바꿀지" 함수(각 도메인 repository가 정의).
     for attempt in range(_INDEX_MAX_RETRIES):
-        data, etag = _get_index_with_etag(platform)   # 최신본 + ETag 읽기
-        mutate(data)                                  # 콜백이 data를 제자리 수정
+        data, etag = _get_json_with_etag(bucket, key, empty)   # 최신본 + ETag 읽기
+        mutate(data)                                           # 콜백이 data를 제자리 수정
         try:
-            put_index(platform, data, etag=etag)      # 읽은 ETag 조건으로 저장 시도
-            return data                               # 성공 → 변경된 인덱스 반환
+            _put_json(bucket, key, data, etag=etag)            # 읽은 ETag 조건으로 저장 시도
+            return data                                        # 성공 → 변경된 대장 반환
         except ClientError as e:
             code = e.response["Error"]["Code"]
             if code in ("PreconditionFailed", "ConditionalRequestConflict"):
                 # 동시 쓰기 충돌 → 살짝 백오프 후 최신본으로 재시도
-                time.sleep(0.05 * (attempt + 1))      # 점증 백오프
+                time.sleep(0.05 * (attempt + 1))               # 점증 백오프
                 continue
-            raise                                     # 그 외 에러는 전파
+            raise                                              # 그 외 에러는 전파
 
-    raise RuntimeError(f"index.json 동시 갱신 재시도 초과: {platform}")   # 5회 실패
+    raise RuntimeError(f"JSON 대장 동시 갱신 재시도 초과: {bucket}/{key}")   # 5회 실패
+
+
+# ── 학습 인덱스(index.json, 신뢰 영역) ───────────────────────────────────────
+
+def get_index(platform: str) -> dict:
+    # 외부에 공개된 단순 조회(ETag 버림). data·training 도메인이 사용.
+    data, _ = _get_json_with_etag(
+        settings.raw_data_bucket, _index_key(platform), {"platform": platform, "files": []}
+    )
+    return data
+
+
+def update_index(platform: str, mutate: Callable[[dict], None]) -> dict:
+    # 학습 인덱스의 원자적 갱신 — 엔진은 _update_json이 정본
+    return _update_json(
+        settings.raw_data_bucket, _index_key(platform),
+        {"platform": platform, "files": []}, mutate,
+    )
+
+
+# ── 업로드 대장(uploads-index.json, 격리 영역) ───────────────────────────────
+
+def get_uploads_index(platform: str) -> dict:
+    # 유저 자동수집 업로드 대장 조회 — data 도메인·승격 플로우가 사용
+    data, _ = _get_json_with_etag(
+        settings.user_uploads_bucket, _uploads_index_key(platform),
+        {"platform": platform, "uploads": []},
+    )
+    return data
+
+
+def update_uploads_index(platform: str, mutate: Callable[[dict], None]) -> dict:
+    # 업로드 대장의 원자적 갱신 — 학습 인덱스와 같은 ETag 낙관적 락 엔진 사용
+    return _update_json(
+        settings.user_uploads_bucket, _uploads_index_key(platform),
+        {"platform": platform, "uploads": []}, mutate,
+    )
 
 
 # ── worker 전용 헬퍼 (worker→core 단방향 의존을 지키기 위해 core에 둔다) ──────

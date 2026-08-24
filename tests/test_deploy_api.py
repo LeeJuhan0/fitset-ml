@@ -25,21 +25,21 @@ def _install_fake_mlflow(monkeypatch, experiment, runs):
     return fake_client
 
 
-def test_deploy_404_when_no_experiment(client, monkeypatch):
+def test_deploy_404_when_no_experiment(admin_client, monkeypatch):
     _install_fake_mlflow(monkeypatch, experiment=None, runs=[])
-    resp = client.post("/api/v1/ios/deploy", json={"version": "v1.3"})
+    resp = admin_client.post("/api/admin/v1/ios/deploy", json={"version": "v1.3"})
     assert resp.status_code == 404
 
 
-def test_deploy_404_when_version_run_missing(client, monkeypatch):
+def test_deploy_404_when_version_run_missing(admin_client, monkeypatch):
     exp = SimpleNamespace(experiment_id="exp-1")
     _install_fake_mlflow(monkeypatch, experiment=exp, runs=[])
-    resp = client.post("/api/v1/ios/deploy", json={"version": "v9.9"})
+    resp = admin_client.post("/api/admin/v1/ios/deploy", json={"version": "v9.9"})
     assert resp.status_code == 404
 
 
 @pytest.mark.parametrize("platform,ext", [("ios", "mlpackage.zip"), ("android", "onnx")])
-def test_deploy_success_updates_latest(client, monkeypatch, platform, ext):
+def test_deploy_success_updates_latest(admin_client, monkeypatch, platform, ext):
     exp = SimpleNamespace(experiment_id="exp-1")
     run = SimpleNamespace(info=SimpleNamespace(run_id="run-abc"))
     _install_fake_mlflow(monkeypatch, experiment=exp, runs=[run])
@@ -47,7 +47,7 @@ def test_deploy_success_updates_latest(client, monkeypatch, platform, ext):
     saved = {}
     monkeypatch.setattr(deploy_mod, "put_latest", lambda p, d: saved.update(platform=p, data=d))
 
-    resp = client.post(f"/api/v1/{platform}/deploy", json={"version": "v1.3"})
+    resp = admin_client.post(f"/api/admin/v1/{platform}/deploy", json={"version": "v1.3"})
     assert resp.status_code == 200
 
     body = resp.json()["data"]
@@ -61,7 +61,7 @@ def test_deploy_success_updates_latest(client, monkeypatch, platform, ext):
     assert saved["data"]["modelUrl"].endswith(f"/{platform}/v1.3/FitSet.{ext}")
 
 
-def test_deploy_requires_version_field(client, monkeypatch):
+def test_deploy_requires_version_field(admin_client, monkeypatch):
     _install_fake_mlflow(monkeypatch, experiment=None, runs=[])
-    resp = client.post("/api/v1/ios/deploy", json={})  # version 누락
+    resp = admin_client.post("/api/admin/v1/ios/deploy", json={})  # version 누락
     assert resp.status_code == 400  # Pydantic 검증 실패 — 팀 규약상 400 INVALID_REQUEST

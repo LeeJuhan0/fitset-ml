@@ -1,9 +1,11 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # training 도메인 API(controller) — 학습 시작/진행률/이력. 유스케이스는 service에 위임.
 # 엔드포인트: POST /train(202), GET /train/status, GET /runs, GET /runs/{run_id}/history
+# 전부 어드민 전용(/api/admin/v1) — 학습 트리거·실험 조회는 운영 행위라 Basic 인증으로 묶는다.
 # ─────────────────────────────────────────────────────────────────────────────
 from fastapi import APIRouter, Depends, Query
 
+from app.core.security import check_basic_auth
 from app.deps import get_trace_id, validate_platform
 from app.core.schemas import ApiResponse
 from app.training import service
@@ -15,10 +17,10 @@ from app.training.schemas import (
     TrainStatusData,
 )
 
-router = APIRouter()
+router = APIRouter(prefix="/api/admin/v1", dependencies=[Depends(check_basic_auth)])
 
 
-@router.post("/api/v1/{platform}/train", status_code=202, response_model=ApiResponse[TrainStartData])
+@router.post("/{platform}/train", status_code=202, response_model=ApiResponse[TrainStartData])
 def start_training(
     body: TrainRequest,
     platform: str = Depends(validate_platform),
@@ -28,7 +30,7 @@ def start_training(
     return {"trace_id": trace_id, "data": service.start_training(platform, body.files, body.epochs, body.lr)}
 
 
-@router.get("/api/v1/{platform}/train/status", response_model=ApiResponse[TrainStatusData])
+@router.get("/{platform}/train/status", response_model=ApiResponse[TrainStatusData])
 def train_status(
     job_id: str = Query(..., alias="jobId"),   # 쿼리 ?jobId= (start_training이 준 run_id)
     platform: str = Depends(validate_platform),
@@ -37,7 +39,7 @@ def train_status(
     return {"trace_id": trace_id, "data": service.get_status(platform, job_id)}
 
 
-@router.get("/api/v1/{platform}/runs", response_model=ApiResponse[RunsData])
+@router.get("/{platform}/runs", response_model=ApiResponse[RunsData])
 def list_runs(
     platform: str = Depends(validate_platform),
     trace_id: str = Depends(get_trace_id),
@@ -45,7 +47,7 @@ def list_runs(
     return {"trace_id": trace_id, "data": service.list_runs(platform)}
 
 
-@router.get("/api/v1/{platform}/runs/{run_id}/history", response_model=ApiResponse[MetricHistoryData])
+@router.get("/{platform}/runs/{run_id}/history", response_model=ApiResponse[MetricHistoryData])
 def run_metric_history(
     run_id: str,
     metric: str = "val_loss",

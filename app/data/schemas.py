@@ -60,3 +60,26 @@ class UploadConfirmData(CamelModel):
     # POST /data/upload-confirm 응답 data
     filename: str
     class_name: str = Field(alias="class")
+
+
+class UploadEntry(CamelModel):
+    # uploads-index.json의 항목 하나 (GET /uploads 응답의 uploads 원소)
+    filename: str
+    class_name: str = Field(alias="class")
+    user_id: str                             # 업로드 소유 유저(토큰 sub) — 동의 철회 삭제 키
+    device_id: str                           # 한 유저의 복수 기기 구분 메타
+    collected_at: str
+    uploaded: bool                           # S3 PUT 확정 여부(3단계 완료)
+    status: str                              # pending → (어드민 결정) approved | rejected
+
+
+class ListUploadsData(CamelModel):
+    # GET /uploads 응답 data — 업로드 대장 조회(상태 필터 적용 후)
+    platform: str
+    uploads: list[UploadEntry]
+
+
+class UploadDecisionData(CamelModel):
+    # POST /uploads/{filename}/approve·reject 응답 data
+    filename: str
+    status: str                              # approved | rejected

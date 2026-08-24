@@ -10,37 +10,40 @@
 
 ## API
 
-모든 엔드포인트는 `/api/v1/{platform}/...` 형태이며, `{platform}`은 `ios` 또는 `android`만 허용됩니다([deps.py](app/deps.py)).
+경로는 호출 주체별 2계층입니다. `{platform}`은 `ios` 또는 `android`만 허용됩니다([deps.py](app/deps.py)).
 
-### 데이터 ([data/router.py](app/data/router.py))
+| 계층 | prefix | 인증 | 용도 |
+|------|--------|------|------|
+| 유저 | `/api/v1/{platform}` | Bearer JWT — 백엔드 JWKS 공개키(RS256)로 직접 검증, `sub`=userId ([core/auth.py](app/core/auth.py)) | 앱 직접 호출 |
+| 어드민 | `/api/admin/v1/{platform}` | Basic — 팀 공용 계정, `MLFLOW_UI_USER/PASSWORD` ([core/security.py](app/core/security.py)) | 대시보드·운영 |
+
+대시보드 정적 파일("/")과 MLflow 프록시(`/mlflow/*`)도 같은 Basic 계정으로 보호됩니다(미설정 시 503 잠금).
+
+### 유저 — 데이터 수집·모델 폴링
 | Method | Path | 설명 |
 |--------|------|------|
-| `GET` | `/data` | S3 인덱스의 등록된 데이터 파일 목록 조회 |
-| `GET` | `/data/presigned-url?filename=&class=` | S3 직접 업로드용 presigned URL 발급 (300초). 경로: `{platform}/raw/{class}/{filename}` |
-| `POST` | `/data/upload-confirm` | 업로드 완료된 파일을 인덱스에 등록 (`collectedAt`, `trainedInVersion=null`) |
+| `GET` | `/api/v1/{p}/data/presigned-url?class=&deviceId=` | 격리 버킷 업로드용 presigned URL 발급 (300초). 경로: `fitset-user-uploads/{platform}/{userId}/{filename}`, 채번 주인은 토큰 userId |
+| `POST` | `/api/v1/{p}/data/upload-confirm` | 업로드 대장(uploads-index.json)의 예약 항목을 `uploaded=true`로 확정 |
+| `GET` | `/api/v1/{p}/model/latest?currentVersion=` | 최신 배포 버전·모델 presigned URL·`metaUrl`·`isUpToDate` 반환. 버전 리포팅 기록 |
 
-### 학습 ([training/router.py](app/training/router.py))
+### 어드민 — 데이터·승격 ([data/router.py](app/data/router.py))
 | Method | Path | 설명 |
 |--------|------|------|
-| `POST` | `/train` | 학습 시작. 파일 검증 후 MLflow run 생성, `trainer`를 서브프로세스로 실행, `202` 반환. 동일 플랫폼 중복 실행 시 `409`. |
-| `GET` | `/train/status?jobId=` | MLflow run 상태/메트릭(epoch, train·val loss, val accuracy) 조회 |
+| `GET` | `/api/admin/v1/{p}/data` | 학습 인덱스의 등록 파일 목록 조회 (신뢰 영역) |
+| `GET` | `/api/admin/v1/{p}/data/stats?filename=` | 파일 센서 통계 (트림 적용 채널 요약) |
+| `GET` | `/api/admin/v1/{p}/uploads?status=` | 유저 업로드 대장 조회 (pending/approved/rejected) |
+| `POST` | `/api/admin/v1/{p}/uploads/{filename}/approve\|reject` | 승격 승인·반려 — 인터페이스만 확정, 처리 로직 구현 전(501) |
 
-### 학습 이력 ([training/router.py](app/training/router.py))
+### 어드민 — 학습·배포 ([training/router.py](app/training/router.py) · [deployment/router.py](app/deployment/router.py))
 | Method | Path | 설명 |
 |--------|------|------|
-| `GET` | `/runs` | 최근 50개 run 목록 + 파라미터/메트릭, `val_accuracy` 기준 best run 표시 |
-| `GET` | `/runs/{run_id}/history?metric=` | 특정 run의 메트릭 시계열(step별) 조회 |
-
-### 배포 ([deployment/router.py](app/deployment/router.py))
-| Method | Path | 설명 |
-|--------|------|------|
-| `POST` | `/deploy` | 버전에 해당하는 모델을 배포(latest로 기록). 모델 경로 확장자: iOS `mlpackage`, Android `tflite` |
-
-### 모델 조회 ([deployment/router.py](app/deployment/router.py))
-| Method | Path | 설명 |
-|--------|------|------|
-| `GET` | `/model/latest?currentVersion=` | 최신 배포 버전·모델 URL·최신 여부(`isUpToDate`) 반환. 클라이언트 버전 리포팅 기록 |
-| `GET` | `/model/version-stats` | 최근 24시간 리포트 기준 버전 분포(count·ratio) 조회 |
+| `POST` | `/api/admin/v1/{p}/train` | 학습 시작(202). 동일 플랫폼 중복 실행 시 `409` |
+| `GET` | `/api/admin/v1/{p}/train/status?jobId=` | MLflow run 상태/메트릭 조회 |
+| `GET` | `/api/admin/v1/{p}/runs` | 최근 50개 run 목록 + best run |
+| `GET` | `/api/admin/v1/{p}/runs/{run_id}/history?metric=` | 메트릭 시계열 조회 |
+| `POST` | `/api/admin/v1/{p}/deploy` | 지정 버전 배포(latest 기록·롤백 포함) |
+| `GET` | `/api/admin/v1/{p}/model/latest` | 대시보드용 최신 모델 조회(분포 집계 미기록) |
+| `GET` | `/api/admin/v1/{p}/model/version-stats` | 최근 24시간 리포트 기준 버전 분포 조회 |
 
 ## 분류 종목 (CLASSES)
 

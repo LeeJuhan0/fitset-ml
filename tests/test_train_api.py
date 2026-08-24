@@ -29,30 +29,30 @@ def _fake_mlflow(run_id="run-xyz"):
     )
 
 
-def test_train_400_on_unknown_file(client, monkeypatch):
+def test_train_400_on_unknown_file(admin_client, monkeypatch):
     monkeypatch.setattr(train_mod, "get_index", lambda p: {"files": [{"filename": "a.csv"}]})
-    resp = client.post("/api/v1/ios/train", json={"files": ["a.csv", "ghost.csv"]})
+    resp = admin_client.post("/api/admin/v1/ios/train", json={"files": ["a.csv", "ghost.csv"]})
     assert resp.status_code == 400
     assert "ghost.csv" in resp.json()["error"]["message"]
 
 
-def test_train_400_on_not_uploaded_file(client, monkeypatch):
+def test_train_400_on_not_uploaded_file(admin_client, monkeypatch):
     # presigned URL만 받고 업로드를 안 끝낸 예약 엔트리 — S3에 실물이 없어 워커가 404로 죽는다.
     monkeypatch.setattr(train_mod, "get_index", lambda p: {"files": [
         {"filename": "a.csv", "uploaded": True},
         {"filename": "pending.csv", "uploaded": False},
     ]})
-    resp = client.post("/api/v1/ios/train", json={"files": ["a.csv", "pending.csv"]})
+    resp = admin_client.post("/api/admin/v1/ios/train", json={"files": ["a.csv", "pending.csv"]})
     assert resp.status_code == 400
     assert "pending.csv" in resp.json()["error"]["message"]
 
 
-def test_train_409_when_already_running(client):
+def test_train_409_when_already_running(admin_client):
     busy = MagicMock()
     busy.poll.return_value = None  # 아직 실행 중
     train_mod._running["ios"] = {"process": busy}
 
-    resp = client.post("/api/v1/ios/train", json={"files": ["a.csv"]})
+    resp = admin_client.post("/api/admin/v1/ios/train", json={"files": ["a.csv"]})
     assert resp.status_code == 409
     # 비즈니스 충돌은 CONFLICT — 서버 오류(INTERNAL_ERROR)와 코드로 구분돼야 한다
     assert resp.json()["error"]["code"] == "CONFLICT"
@@ -60,7 +60,7 @@ def test_train_409_when_already_running(client):
     assert resp.headers["X-Trace-Id"] == resp.json()["traceId"]
 
 
-def test_train_202_spawns_worker(client, monkeypatch):
+def test_train_202_spawns_worker(admin_client, monkeypatch):
     monkeypatch.setattr(train_mod, "get_index", lambda p: {"files": [{"filename": "a.csv"}]})
     monkeypatch.setattr(train_mod, "next_version", lambda p: "v1.4")
     monkeypatch.setattr(train_mod, "mlflow", _fake_mlflow(run_id="run-xyz"))
@@ -75,7 +75,7 @@ def test_train_202_spawns_worker(client, monkeypatch):
 
     monkeypatch.setattr(train_mod, "subprocess", SimpleNamespace(Popen=fake_popen))
 
-    resp = client.post("/api/v1/ios/train", json={"files": ["a.csv"], "epochs": 50, "lr": 0.01})
+    resp = admin_client.post("/api/admin/v1/ios/train", json={"files": ["a.csv"], "epochs": 50, "lr": 0.01})
     assert resp.status_code == 202
 
     data = resp.json()["data"]
@@ -90,19 +90,19 @@ def test_train_202_spawns_worker(client, monkeypatch):
     assert train_mod._running["ios"]["job_id"] == "run-xyz"
 
 
-def test_train_uses_default_epochs_and_lr(client, monkeypatch):
+def test_train_uses_default_epochs_and_lr(admin_client, monkeypatch):
     monkeypatch.setattr(train_mod, "get_index", lambda p: {"files": [{"filename": "a.csv"}]})
     monkeypatch.setattr(train_mod, "next_version", lambda p: "v1.0")
     monkeypatch.setattr(train_mod, "mlflow", _fake_mlflow())
     proc = MagicMock(); proc.poll.return_value = None
     monkeypatch.setattr(train_mod, "subprocess", SimpleNamespace(Popen=lambda *a, **k: proc))
 
-    resp = client.post("/api/v1/ios/train", json={"files": ["a.csv"]})
+    resp = admin_client.post("/api/admin/v1/ios/train", json={"files": ["a.csv"]})
     assert resp.status_code == 202
     assert resp.json()["data"]["totalEpochs"] == 200  # 기본값
 
 
-def test_train_status_maps_running(client, monkeypatch):
+def test_train_status_maps_running(admin_client, monkeypatch):
     run = SimpleNamespace(
         info=SimpleNamespace(status="RUNNING", experiment_id="exp-1"),
         data=SimpleNamespace(metrics={"epoch": 12, "train_loss": 0.4, "val_loss": 0.5, "val_accuracy": 0.8}),
@@ -115,7 +115,7 @@ def test_train_status_maps_running(client, monkeypatch):
     )
     train_mod._running["ios"] = {"total_epochs": 100}
 
-    resp = client.get("/api/v1/ios/train/status?jobId=run-xyz")
+    resp = admin_client.get("/api/admin/v1/ios/train/status?jobId=run-xyz")
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert data["status"] == "running"
@@ -124,12 +124,12 @@ def test_train_status_maps_running(client, monkeypatch):
     assert data["valAccuracy"] == 0.8
 
 
-def test_train_status_404_on_unknown_job(client, monkeypatch):
+def test_train_status_404_on_unknown_job(admin_client, monkeypatch):
     fake_client = MagicMock()
     fake_client.get_run.side_effect = Exception("not found")
     monkeypatch.setattr(
         train_mod, "mlflow",
         SimpleNamespace(set_tracking_uri=lambda u: None, MlflowClient=lambda: fake_client),
     )
-    resp = client.get("/api/v1/ios/train/status?jobId=missing")
+    resp = admin_client.get("/api/admin/v1/ios/train/status?jobId=missing")
     assert resp.status_code == 404
