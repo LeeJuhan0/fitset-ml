@@ -1,0 +1,7 @@
+# user_api 전용 최소 의존성 — 유저 트래픽 3개 엔드포인트(presigned-url·upload-confirm·model/latest).
+# torch·mlflow·pandas·httpx(프록시)는 어드민/워커 전용이라 뺀다 — 이미지 크기·기동 시간 절감.
+fastapi
+uvicorn[standard]
+boto3
+pydantic-settings
+pyjwt[crypto]  # 유저 JWT RS256 검증(app/core/auth.py)

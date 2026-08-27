@@ -9,3 +9,9 @@ terraform/terraform.tfstate
 terraform/terraform.tfstate.backup
 .pytest_cache/
 .DS_Store
+
+# mlflow 이미지 빌드 자산 — S3 백업에서 복사해 쓰는 스냅샷(커밋 금지)
+services/mlflow/mlflow.db
+
+# Airflow 재학습 WIP — 별도 작업으로 커밋 예정 (짝인 airflow/와 함께)
+tests/test_retrain_rules.py

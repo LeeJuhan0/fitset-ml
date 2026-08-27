@@ -39,10 +39,10 @@ def test_access_log_emitted_with_method_status(admin_client, caplog, monkeypatch
     monkeypatch.setattr(data_mod, "get_index", lambda p: {"platform": "ios", "files": []})
 
     with caplog.at_level(logging.INFO, logger="fitset-ml"):
-        admin_client.get("/api/admin/v1/ios/data")
+        admin_client.get("/api/v1/ios/data")
 
     access = [r for r in caplog.records
-              if r.name == "fitset-ml" and "/api/admin/v1/ios/data" in r.getMessage()]
+              if r.name == "fitset-ml" and "/api/v1/ios/data" in r.getMessage()]
     assert len(access) == 1
     assert "GET" in access[0].getMessage() and " 200 " in access[0].getMessage()
 
@@ -57,9 +57,9 @@ def test_access_log_skips_health(client, caplog):
 def test_access_log_level_follows_status(client, caplog):
     # 인증 없는 어드민 호출 → 401 → WARNING 레벨 액세스 로그
     with caplog.at_level(logging.INFO, logger="fitset-ml"):
-        client.get("/api/admin/v1/ios/data")
+        client.get("/api/v1/ios/data")
     access = [r for r in caplog.records
-              if r.name == "fitset-ml" and "/api/admin/v1/ios/data" in r.getMessage()]
+              if r.name == "fitset-ml" and "/api/v1/ios/data" in r.getMessage()]
     assert len(access) == 1
     assert access[0].levelno == logging.WARNING
 

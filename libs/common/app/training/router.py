@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # training 도메인 API(controller) — 학습 시작/진행률/이력. 유스케이스는 service에 위임.
 # 엔드포인트: POST /train(202), GET /train/status, GET /runs, GET /runs/{run_id}/history
-# 전부 어드민 전용(/api/admin/v1) — 학습 트리거·실험 조회는 운영 행위라 Basic 인증으로 묶는다.
+# 전부 어드민 전용(admin 호스트 /api/v1) — 학습 트리거·실험 조회는 운영 행위라 Basic 인증으로 묶는다.
 # ─────────────────────────────────────────────────────────────────────────────
 from fastapi import APIRouter, Depends, Query
 
@@ -17,7 +17,8 @@ from app.training.schemas import (
     TrainStatusData,
 )
 
-router = APIRouter(prefix="/api/admin/v1", dependencies=[Depends(check_basic_auth)])
+# prefix(/api/v1)는 admin_api main이 등록한다 — 호스트(admin-stage.*)가 서비스 경계
+router = APIRouter(dependencies=[Depends(check_basic_auth)])
 
 
 @router.post("/{platform}/train", status_code=202, response_model=ApiResponse[TrainStartData])

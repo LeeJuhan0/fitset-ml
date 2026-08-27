@@ -7,7 +7,7 @@
 #
 # 흐름: trace_id_middleware(main.py)가 요청마다 trace_id_var.set() →
 # 요청 처리 중의 모든 logger 호출에 _TraceIdFilter가 그 값을 붙임 →
-# "2026-08-24 ... INFO fitset-ml [4a31f1fc...] POST /api/admin/v1/ios/train 202 84ms"
+# "2026-08-24 ... INFO fitset-ml [4a31f1fc...] POST /api/v1/ios/train 202 84ms"
 #
 # 파일 저장 코드가 없는 건 의도 — stdout까지가 우리 책임(docker logs → CloudWatch),
 # 수집·보관은 실행 환경 몫.

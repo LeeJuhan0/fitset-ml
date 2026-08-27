@@ -1,0 +1,67 @@
+# 서비스 이미지 3종(user-api·admin-api·mlflow)을 빌드해 ECR에 푸시한다.
+# 배포는 하지 않는다 — 배포 대상(ECS·k8s)은 별도 파이프라인/매니페스트가 담당.
+# 테스트 게이트는 PR의 test.yml이 담당하므로 여기서는 재실행하지 않는다(머지 = 통과 전제).
+name: build-images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "libs/**"
+      - "services/**"
+      - "requirements/**"
+      - ".github/workflows/build-images.yml"
+  workflow_dispatch: {}   # 수동 재빌드용
+
+concurrency:
+  group: build-images-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR: 729743892772.dkr.ecr.ap-northeast-2.amazonaws.com
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: fitset-ml-user-api
+            dockerfile: services/user_api/Dockerfile
+          - name: fitset-ml-admin-api
+            dockerfile: services/admin_api/Dockerfile
+          - name: fitset-mlflow
+            dockerfile: services/mlflow/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # mlflow 이미지는 스냅샷 DB를 굽는다 — 빌드 자산이라 git에 없고 S3 백업에서 받는다
+      - name: Fetch mlflow snapshot db
+        if: matrix.name == 'fitset-mlflow'
+        run: aws s3 cp s3://fitset-models/backup/mlflow-20260824.db services/mlflow/mlflow.db
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.ECR }}/${{ matrix.name }}:${{ github.sha }}
+            ${{ env.ECR }}/${{ matrix.name }}:latest
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

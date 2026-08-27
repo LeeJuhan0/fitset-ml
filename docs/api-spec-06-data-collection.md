@@ -7,11 +7,11 @@
 | 프로젝트명 | FitSet |
 | 문서 범위 | 센서 데이터(IMU CSV) 업로드 및 데이터셋 조회 — ML 서버(fitset-ml-server) |
 | API 버전 | v1 |
-| Base URL | 환경별 ML 서버 호스트 + `/api/v1/{platform}` |
-| 인증 방식 | 없음(MVP — 내부 관리자 대시보드·수집앱 전용) |
+| Base URL | 유저 `/ml/v1/{platform}`, 어드민 `/admin/v1/{platform}` (환경별 ML 서버 호스트 뒤) |
+| 인증 방식 | 유저 API는 Bearer JWT(백엔드 발급, JWKS 검증), 어드민 API는 Basic |
 | Content-Type | `application/json` (S3 직접 업로드만 `text/csv`) |
 | 연관 에픽 | FIT-32 센서 데이터 수집 |
-| 최종 수정일 | 2026년 7월 12일 |
+| 최종 수정일 | 2026년 8월 24일 |
 | 작성자 | @이주한 |
 
 ## 2. 공통 규칙
@@ -20,7 +20,7 @@
 
 ### 2.1 Base URL과 platform 경로 변수
 
-모든 엔드포인트는 `/api/v1/{platform}/...` 형태이며, `{platform}`은 `ios` 또는 `android`만 허용한다. 그 외 값은 `400`으로 거부된다. 데이터셋·모델 버전은 플랫폼별로 완전히 독립 운영된다.
+모든 엔드포인트는 유저용 `/ml/v1/{platform}/...`, 어드민용 `/admin/v1/{platform}/...` 형태이며, `{platform}`은 `ios` 또는 `android`만 허용한다. 그 외 값은 `400`으로 거부된다. 데이터셋·모델 버전은 플랫폼별로 완전히 독립 운영된다. 구 `/api/v1`·`/api/admin/v1` 경로는 클라이언트 전환 전까지 한시 병행한다(2026-08-24 경로 개편).
 
 ### 2.2 요청 헤더
 
@@ -28,7 +28,7 @@
 Content-Type: application/json
 ```
 
-인증 헤더는 없다. (S3 직접 PUT 시에만 `Content-Type: text/csv` — 4.3 참고)
+유저 API는 `Authorization: Bearer {JWT}`, 어드민 API는 `Authorization: Basic` 헤더를 요구한다. (S3 직접 PUT 시에만 `Content-Type: text/csv` — 4.3 참고)
 
 ### 2.3 데이터 형식
 
@@ -133,7 +133,7 @@ timestamp,ax,ay,az,gx,gy,gz,label
 |------|------|
 | 설명 | S3 인덱스(index.json)에 등록된 플랫폼별 수집 파일 목록과 학습 사용 여부를 조회한다. |
 | Method | GET |
-| URL | `/api/v1/{platform}/data` |
+| URL | `/admin/v1/{platform}/data` |
 | 권한 | Public (내부용) |
 | 연관 요구사항 | FIT-39 |
 | 인증 필요 | 아니오 |
@@ -207,7 +207,7 @@ timestamp,ax,ay,az,gx,gy,gz,label
 |------|------|
 | 설명 | 서버가 인덱스를 보고 파일명을 채번·예약한 뒤, 클라이언트가 S3에 직접 PUT할 수 있는 presigned URL을 발급한다. |
 | Method | GET |
-| URL | `/api/v1/{platform}/data/presigned-url` |
+| URL | `/ml/v1/{platform}/data/presigned-url` |
 | 권한 | Public (내부용) |
 | 연관 요구사항 | FIT-37 |
 | 인증 필요 | 아니오 |
@@ -292,7 +292,7 @@ ML 서버 엔드포인트가 아니라 **발급받은 presigned URL로의 S3 직
 |------|------|
 | 설명 | S3 PUT 완료 후, presigned 단계에서 예약된 인덱스 항목을 `uploaded=true`로 확정한다. |
 | Method | POST |
-| URL | `/api/v1/{platform}/data/upload-confirm` |
+| URL | `/ml/v1/{platform}/data/upload-confirm` |
 | 권한 | Public (내부용) |
 | 연관 요구사항 | FIT-37 |
 | 인증 필요 | 아니오 |
@@ -363,10 +363,10 @@ ML 서버 엔드포인트가 아니라 **발급받은 presigned URL로의 S3 직
 
 | Method | Path | 설명 | 인증 |
 |--------|------|------|------|
-| GET | `/api/v1/{platform}/data` | 등록 파일 목록·학습 사용 여부 조회 | 불필요 |
-| GET | `/api/v1/{platform}/data/presigned-url` | 파일명 채번·예약 + presigned PUT URL 발급(300초) | 불필요 |
+| GET | `/admin/v1/{platform}/data` | 등록 파일 목록·학습 사용 여부 조회 | Basic |
+| GET | `/ml/v1/{platform}/data/presigned-url` | 파일명 채번·예약 + presigned PUT URL 발급(300초) | Bearer JWT |
 | PUT | `{presignedUrl}` (S3) | CSV 직접 업로드 (`Content-Type: text/csv`) | presigned 서명 |
-| POST | `/api/v1/{platform}/data/upload-confirm` | 예약 항목 업로드 확정(`uploaded=true`) | 불필요 |
+| POST | `/ml/v1/{platform}/data/upload-confirm` | 예약 항목 업로드 확정(`uploaded=true`) | Bearer JWT |
 
 ## 6. 오류 코드 정리
 

@@ -14,7 +14,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
-from app.main import app
+from admin_api.main import app as admin_app   # 어드민 라우터·대시보드·mlflow 프록시
+from user_api.main import app as user_app     # 유저 라우터 3개(JWT)
 
 # 유저 JWT 테스트 키쌍 — 개인키로 서명하고 공개키를 settings에 주입해 JWKS를 우회한다
 _USER_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -38,7 +39,8 @@ ADMIN_AUTH = ("admin", "admin-test-pw")
 
 @pytest.fixture
 def client():
-    return TestClient(app)
+    # 무인증 클라이언트 — 어드민 서비스 대상(정적·헬스·인증 실패 케이스 검증용)
+    return TestClient(admin_app)
 
 
 @pytest.fixture
@@ -46,7 +48,7 @@ def admin_client(monkeypatch):
     # 어드민 계정을 설정에 주입하고, 모든 요청에 Basic 인증이 실리는 클라이언트를 돌려준다
     monkeypatch.setattr(settings, "mlflow_ui_user", ADMIN_AUTH[0])
     monkeypatch.setattr(settings, "mlflow_ui_password", ADMIN_AUTH[1])
-    c = TestClient(app)
+    c = TestClient(admin_app)
     c.auth = ADMIN_AUTH
     return c
 
@@ -55,6 +57,6 @@ def admin_client(monkeypatch):
 def user_client(monkeypatch):
     # 유효한 Bearer 토큰이 모든 요청에 실리는 클라이언트 — 유저 엔드포인트(/api/v1) 테스트용
     monkeypatch.setattr(settings, "jwt_public_key_pem", USER_PUBLIC_PEM)
-    c = TestClient(app)
+    c = TestClient(user_app)
     c.headers["Authorization"] = f"Bearer {make_user_token()}"
     return c

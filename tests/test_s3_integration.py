@@ -163,3 +163,18 @@ def test_concurrent_create_only_one_wins_then_merges(s3_backed):
 
     names = {f["filename"] for f in _read(s3_backed)["files"]}
     assert names == {"other.csv", "mine.csv"}
+
+
+def test_reserve_admin_upload_uses_dataset_index(s3_backed):
+    # 어드민 직행 — 학습 인덱스(index.json)에 예약되고 deviceId 기준으로 채번된다
+    f1 = data_repo.reserve_admin_upload("ios", "SQUAT", "DEV1")
+    f2 = data_repo.reserve_admin_upload("ios", "SQUAT", "DEV1")
+    assert [f1, f2] == ["SQUAT_DEV1_0001.csv", "SQUAT_DEV1_0002.csv"]
+
+    entry = next(f for f in _read(s3_backed)["files"] if f["filename"] == f1)
+    assert entry["uploaded"] is False
+    assert entry["trainedInVersion"] is None
+
+    data_repo.mark_admin_uploaded("ios", f1)
+    entry = next(f for f in _read(s3_backed)["files"] if f["filename"] == f1)
+    assert entry["uploaded"] is True

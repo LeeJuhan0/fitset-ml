@@ -6,12 +6,12 @@ import pytest
 
 # (픽스처 이름, method, path 템플릿) — 모든 라우터가 validate_platform 의존성을 공유한다.
 ENDPOINTS = [
-    ("user_client", "get", "/api/v1/{p}/data/presigned-url?filename=a.csv&class=SQUAT"),
-    ("user_client", "get", "/api/v1/{p}/model/latest"),
-    ("admin_client", "get", "/api/admin/v1/{p}/data"),
-    ("admin_client", "get", "/api/admin/v1/{p}/train/status?jobId=x"),
-    ("admin_client", "get", "/api/admin/v1/{p}/model/version-stats"),
-    ("admin_client", "get", "/api/admin/v1/{p}/runs"),
+    ("user_client", "get", "/ml/v1/{p}/data/presigned-url?filename=a.csv&class=SQUAT"),
+    ("user_client", "get", "/ml/v1/{p}/model/latest"),
+    ("admin_client", "get", "/api/v1/{p}/data"),
+    ("admin_client", "get", "/api/v1/{p}/train/status?jobId=x"),
+    ("admin_client", "get", "/api/v1/{p}/model/version-stats"),
+    ("admin_client", "get", "/api/v1/{p}/runs"),
 ]
 
 
@@ -34,6 +34,6 @@ def test_valid_platform_passes_validation(admin_client, monkeypatch, good):
     import app.data.service as data_mod
     monkeypatch.setattr(data_mod, "get_index", lambda p: {"platform": p, "files": []})
 
-    resp = admin_client.get(f"/api/admin/v1/{good}/data")
+    resp = admin_client.get(f"/api/v1/{good}/data")
     assert resp.status_code == 200
     assert resp.json()["data"]["platform"] == good

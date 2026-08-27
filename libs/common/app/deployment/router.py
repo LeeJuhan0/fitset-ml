@@ -2,7 +2,7 @@
 # deployment 도메인 API(controller) — 배포/최신 모델 조회/버전 분포. 유스케이스는 service에 위임.
 # 라우터 2개로 분리 — 호출 주체가 다르면 인증도 다르다:
 #   router(유저, /api/v1):        GET /model/latest — 앱 폴링
-#   admin_router(어드민, /api/admin/v1): POST /deploy, GET /model/version-stats — 배포·대시보드
+#   admin_router(어드민 호스트 /api/v1): POST /deploy, GET /model/version-stats — 배포·대시보드
 # ─────────────────────────────────────────────────────────────────────────────
 from fastapi import APIRouter, Depends, Query
 
@@ -12,12 +12,11 @@ from app.core.schemas import ApiResponse
 from app.deployment import service
 from app.deployment.schemas import DeployData, DeployRequest, ModelLatestData, VersionStatsData
 
+# prefix는 각 서비스 main이 등록한다 — 유저 /ml/v1, 어드민 /api/v1 (호스트가 경계)
 router = APIRouter(                             # 유저용 — 앱 폴링, 전 엔드포인트에 JWT 검증
-    prefix="/api/v1",
     dependencies=[Depends(get_current_user_id)],
 )
 admin_router = APIRouter(                       # 어드민용 — 전 엔드포인트에 Basic 인증
-    prefix="/api/admin/v1",
     dependencies=[Depends(check_basic_auth)],
 )
 

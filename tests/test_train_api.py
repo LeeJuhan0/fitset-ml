@@ -31,7 +31,7 @@ def _fake_mlflow(run_id="run-xyz"):
 
 def test_train_400_on_unknown_file(admin_client, monkeypatch):
     monkeypatch.setattr(train_mod, "get_index", lambda p: {"files": [{"filename": "a.csv"}]})
-    resp = admin_client.post("/api/admin/v1/ios/train", json={"files": ["a.csv", "ghost.csv"]})
+    resp = admin_client.post("/api/v1/ios/train", json={"files": ["a.csv", "ghost.csv"]})
     assert resp.status_code == 400
     assert "ghost.csv" in resp.json()["error"]["message"]
 
@@ -42,7 +42,7 @@ def test_train_400_on_not_uploaded_file(admin_client, monkeypatch):
         {"filename": "a.csv", "uploaded": True},
         {"filename": "pending.csv", "uploaded": False},
     ]})
-    resp = admin_client.post("/api/admin/v1/ios/train", json={"files": ["a.csv", "pending.csv"]})
+    resp = admin_client.post("/api/v1/ios/train", json={"files": ["a.csv", "pending.csv"]})
     assert resp.status_code == 400
     assert "pending.csv" in resp.json()["error"]["message"]
 
@@ -52,7 +52,7 @@ def test_train_409_when_already_running(admin_client):
     busy.poll.return_value = None  # 아직 실행 중
     train_mod._running["ios"] = {"process": busy}
 
-    resp = admin_client.post("/api/admin/v1/ios/train", json={"files": ["a.csv"]})
+    resp = admin_client.post("/api/v1/ios/train", json={"files": ["a.csv"]})
     assert resp.status_code == 409
     # 비즈니스 충돌은 CONFLICT — 서버 오류(INTERNAL_ERROR)와 코드로 구분돼야 한다
     assert resp.json()["error"]["code"] == "CONFLICT"
@@ -75,7 +75,7 @@ def test_train_202_spawns_worker(admin_client, monkeypatch):
 
     monkeypatch.setattr(train_mod, "subprocess", SimpleNamespace(Popen=fake_popen))
 
-    resp = admin_client.post("/api/admin/v1/ios/train", json={"files": ["a.csv"], "epochs": 50, "lr": 0.01})
+    resp = admin_client.post("/api/v1/ios/train", json={"files": ["a.csv"], "epochs": 50, "lr": 0.01})
     assert resp.status_code == 202
 
     data = resp.json()["data"]
@@ -97,7 +97,7 @@ def test_train_uses_default_epochs_and_lr(admin_client, monkeypatch):
     proc = MagicMock(); proc.poll.return_value = None
     monkeypatch.setattr(train_mod, "subprocess", SimpleNamespace(Popen=lambda *a, **k: proc))
 
-    resp = admin_client.post("/api/admin/v1/ios/train", json={"files": ["a.csv"]})
+    resp = admin_client.post("/api/v1/ios/train", json={"files": ["a.csv"]})
     assert resp.status_code == 202
     assert resp.json()["data"]["totalEpochs"] == 200  # 기본값
 
@@ -115,7 +115,7 @@ def test_train_status_maps_running(admin_client, monkeypatch):
     )
     train_mod._running["ios"] = {"total_epochs": 100}
 
-    resp = admin_client.get("/api/admin/v1/ios/train/status?jobId=run-xyz")
+    resp = admin_client.get("/api/v1/ios/train/status?jobId=run-xyz")
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert data["status"] == "running"
@@ -131,5 +131,5 @@ def test_train_status_404_on_unknown_job(admin_client, monkeypatch):
         train_mod, "mlflow",
         SimpleNamespace(set_tracking_uri=lambda u: None, MlflowClient=lambda: fake_client),
     )
-    resp = admin_client.get("/api/admin/v1/ios/train/status?jobId=missing")
+    resp = admin_client.get("/api/v1/ios/train/status?jobId=missing")
     assert resp.status_code == 404

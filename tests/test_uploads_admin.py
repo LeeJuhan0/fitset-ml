@@ -24,7 +24,7 @@ def uploads_index(monkeypatch):
 
 
 def test_list_uploads_returns_all_without_filter(admin_client, uploads_index):
-    resp = admin_client.get("/api/admin/v1/ios/uploads")
+    resp = admin_client.get("/api/v1/ios/uploads")
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert data["platform"] == "ios"
@@ -38,25 +38,25 @@ def test_list_uploads_returns_all_without_filter(admin_client, uploads_index):
 
 
 def test_list_uploads_filters_by_status(admin_client, uploads_index):
-    resp = admin_client.get("/api/admin/v1/ios/uploads?status=pending")
+    resp = admin_client.get("/api/v1/ios/uploads?status=pending")
     assert resp.status_code == 200
     uploads = resp.json()["data"]["uploads"]
     assert [u["filename"] for u in uploads] == ["SQUAT_user1_0001.csv"]
 
 
 def test_list_uploads_rejects_unknown_status(admin_client, uploads_index):
-    resp = admin_client.get("/api/admin/v1/ios/uploads?status=maybe")
+    resp = admin_client.get("/api/v1/ios/uploads?status=maybe")
     assert resp.status_code == 400
 
 
 @pytest.mark.parametrize("action", ["approve", "reject"])
 def test_promotion_endpoints_are_skeleton_501(admin_client, action):
     # 인터페이스는 확정, 처리 로직은 미구현 — 내부오류(500)가 아니라 501 계약으로 응답
-    resp = admin_client.post(f"/api/admin/v1/ios/uploads/SQUAT_user1_0001.csv/{action}")
+    resp = admin_client.post(f"/api/v1/ios/uploads/SQUAT_user1_0001.csv/{action}")
     assert resp.status_code == 501
     assert resp.json()["error"]["code"] == "NOT_IMPLEMENTED"
 
 
 def test_uploads_require_admin_auth(client):
-    resp = client.get("/api/admin/v1/ios/uploads")
+    resp = client.get("/api/v1/ios/uploads")
     assert resp.status_code == 401

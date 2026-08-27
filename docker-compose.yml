@@ -18,9 +18,10 @@ services:
     restart: always
 
   api:
+    # 어드민 서비스 — 대시보드·mlflow 프록시·학습 worker 포함
     build: .
     image: fitset-ml-server:latest
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn admin_api.main:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
     environment:
@@ -33,4 +34,18 @@ services:
       AWS_REGION: ap-northeast-2
     depends_on:
       - mlflow
+    restart: always
+
+  user-api:
+    # 유저 트래픽 서비스 — JWT 인증 3개 엔드포인트만
+    build: .
+    image: fitset-ml-server:latest
+    command: uvicorn user_api.main:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    environment:
+      RAW_DATA_BUCKET: fitset-dataset
+      MODELS_BUCKET: fitset-models
+      USER_UPLOADS_BUCKET: fitset-user-uploads
+      AWS_REGION: ap-northeast-2
     restart: always

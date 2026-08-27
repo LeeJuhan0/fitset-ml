@@ -7,7 +7,6 @@ import time                                    # 리포트 시각 기록
 from collections import defaultdict, deque    # 자동 초기화 dict, 시간순 리포트 큐
 from datetime import datetime, timezone       # 배포 시각(UTC ISO)
 
-import mlflow
 from fastapi import HTTPException
 
 from app.core.config import settings
@@ -33,6 +32,9 @@ def _prune(platform: str):
 
 def deploy(platform: str, version: str) -> dict:
     """지정 버전을 latest.json에 기록하는 배포 유스케이스 (롤백 = 과거 버전 재배포)."""
+    # mlflow는 배포(어드민)만 쓴다 — 유저 서비스 이미지가 mlflow 없이 뜨도록 지연 import
+    import mlflow
+
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     client = mlflow.MlflowClient()
 

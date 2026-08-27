@@ -7,14 +7,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
-from app.main import app
+from admin_api.main import app
 from tests.conftest import ADMIN_AUTH
 
 ADMIN_PATHS = [
-    ("get", "/api/admin/v1/ios/data"),
-    ("get", "/api/admin/v1/ios/runs"),
-    ("post", "/api/admin/v1/ios/deploy"),
-    ("get", "/api/admin/v1/ios/model/version-stats"),
+    ("get", "/api/v1/ios/data"),
+    ("get", "/api/v1/ios/runs"),
+    ("post", "/api/v1/ios/deploy"),
+    ("get", "/api/v1/ios/model/version-stats"),
 ]
 
 
@@ -39,18 +39,18 @@ def test_unset_credentials_lock_503(client, monkeypatch):
     # 계정이 비어 있으면 맞는 비밀번호가 존재하지 않으므로 전면 잠금
     monkeypatch.setattr(settings, "mlflow_ui_user", "")
     monkeypatch.setattr(settings, "mlflow_ui_password", "")
-    resp = client.get("/api/admin/v1/ios/data", auth=("any", "any"))
+    resp = client.get("/api/v1/ios/data", auth=("any", "any"))
     assert resp.status_code == 503
     assert resp.json()["error"]["code"] == "ADMIN_AUTH_LOCKED"
 
 
 def test_user_endpoints_do_not_require_basic(user_client, monkeypatch):
-    # 유저 경로는 Basic 의존성이 없어야 한다 — 어드민 잠금과 무관하게 JWT만으로 동작
+    # 유저 서비스는 Basic 의존성이 없어야 한다 — 어드민 잠금과 무관하게 JWT만으로 동작
     import app.deployment.service as model_mod
     monkeypatch.setattr(settings, "mlflow_ui_user", "")
     monkeypatch.setattr(settings, "mlflow_ui_password", "")
     monkeypatch.setattr(model_mod, "get_latest", lambda p: None)
-    resp = user_client.get("/api/v1/ios/model/latest")
+    resp = user_client.get("/ml/v1/ios/model/latest")
     assert resp.status_code == 404   # 503/401이 아니라 도메인 결과(배포 없음)
 
 

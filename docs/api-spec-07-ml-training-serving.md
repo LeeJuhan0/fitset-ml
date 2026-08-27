@@ -7,11 +7,11 @@
 | 프로젝트명 | FitSet |
 | 문서 범위 | 모델 학습 시작·모니터링, 학습 이력, 배포, 클라이언트 모델 서빙 — ML 서버(fitset-ml-server) |
 | API 버전 | v1 |
-| Base URL | 환경별 ML 서버 호스트 + `/api/v1/{platform}` |
-| 인증 방식 | 없음(MVP — 내부 관리자 대시보드·앱 전용) |
+| Base URL | 유저 `/ml/v1/{platform}`, 어드민 `/admin/v1/{platform}` (환경별 ML 서버 호스트 뒤) |
+| 인증 방식 | 유저 API는 Bearer JWT(백엔드 발급, JWKS 검증), 어드민 API는 Basic |
 | Content-Type | `application/json` |
 | 연관 에픽 | FIT-33 ML 모델 학습 및 서빙 |
-| 최종 수정일 | 2026년 7월 12일 |
+| 최종 수정일 | 2026년 8월 24일 |
 | 작성자 | @이주한 |
 
 ## 2. 공통 규칙
@@ -62,7 +62,7 @@
 |------|------|
 | 설명 | 선택한 CSV 파일들로 비동기 학습을 시작한다. 파일 검증 후 MLflow run을 생성하고 trainer를 별도 프로세스로 실행, 즉시 202를 반환한다. |
 | Method | POST |
-| URL | `/api/v1/{platform}/train` |
+| URL | `/admin/v1/{platform}/train` |
 | 권한 | Public (내부용) |
 | 연관 요구사항 | FIT-41 |
 | 인증 필요 | 아니오 |
@@ -143,7 +143,7 @@
 |------|------|
 | 설명 | MLflow run의 상태와 최신 메트릭(에폭·손실·정확도)을 조회한다. 대시보드가 폴링해 실시간 진행 UI를 그린다. |
 | Method | GET |
-| URL | `/api/v1/{platform}/train/status` |
+| URL | `/admin/v1/{platform}/train/status` |
 | 권한 | Public (내부용) |
 | 연관 요구사항 | FIT-41 |
 | 인증 필요 | 아니오 |
@@ -207,7 +207,7 @@
 |------|------|
 | 설명 | 플랫폼의 최근 학습 run 최대 50개를 파라미터·메트릭과 함께 조회하고, `valAccuracy` 기준 best run을 표시한다. 배포 전 버전 비교용. |
 | Method | GET |
-| URL | `/api/v1/{platform}/runs` |
+| URL | `/admin/v1/{platform}/runs` |
 | 권한 | Public (내부용) |
 | 연관 요구사항 | FIT-43 |
 | 인증 필요 | 아니오 |
@@ -282,7 +282,7 @@ Path Parameter(`platform`) 외 없음.
 |------|------|
 | 설명 | 특정 run의 메트릭을 step(에폭)별 시계열로 조회한다. 대시보드 학습 곡선 차트용. |
 | Method | GET |
-| URL | `/api/v1/{platform}/runs/{run_id}/history` |
+| URL | `/admin/v1/{platform}/runs/{run_id}/history` |
 | 권한 | Public (내부용) |
 | 연관 요구사항 | FIT-43 |
 | 인증 필요 | 아니오 |
@@ -346,7 +346,7 @@ Path Parameter(`platform`) 외 없음.
 |------|------|
 | 설명 | 지정 버전의 모델을 latest로 기록(S3 latest.json 갱신)한다. 이후 클라이언트가 `/model/latest` 폴링으로 새 모델을 받는다. |
 | Method | POST |
-| URL | `/api/v1/{platform}/deploy` |
+| URL | `/admin/v1/{platform}/deploy` |
 | 권한 | Public (내부용) |
 | 연관 요구사항 | FIT-43 |
 | 인증 필요 | 아니오 |
@@ -413,7 +413,7 @@ Path Parameter(`platform`) 외 없음.
 |------|------|
 | 설명 | 현재 배포된 최신 모델 버전·다운로드 URL·클라이언트 최신 여부를 반환한다. 앱이 실행·포그라운드 전환 시 폴링한다. |
 | Method | GET |
-| URL | `/api/v1/{platform}/model/latest` |
+| URL | `/ml/v1/{platform}/model/latest` |
 | 권한 | Public (앱) |
 | 연관 요구사항 | FIT-45 |
 | 인증 필요 | 아니오 |
@@ -472,7 +472,7 @@ Path Parameter(`platform`) 외 없음.
 |------|------|
 | 설명 | `/model/latest` 폴링 시 리포팅된 `currentVersion`을 최근 24시간 윈도우로 집계한 클라이언트 버전 분포를 조회한다. 대시보드 버전 분포 패널용. |
 | Method | GET |
-| URL | `/api/v1/{platform}/model/version-stats` |
+| URL | `/admin/v1/{platform}/model/version-stats` |
 | 권한 | Public (내부용) |
 | 연관 요구사항 | FIT-46 |
 | 인증 필요 | 아니오 |
@@ -526,13 +526,13 @@ Path Parameter(`platform`) 외 없음.
 
 | Method | Path | 설명 | 인증 |
 |--------|------|------|------|
-| POST | `/api/v1/{platform}/train` | 학습 시작 (비동기, 202) | 불필요 |
-| GET | `/api/v1/{platform}/train/status?jobId=` | 학습 진행률·메트릭 조회 | 불필요 |
-| GET | `/api/v1/{platform}/runs` | 최근 50개 학습 이력 + best run | 불필요 |
-| GET | `/api/v1/{platform}/runs/{run_id}/history?metric=` | 메트릭 step별 시계열 | 불필요 |
-| POST | `/api/v1/{platform}/deploy` | 지정 버전 배포 (latest 기록) | 불필요 |
-| GET | `/api/v1/{platform}/model/latest?currentVersion=` | 최신 모델 조회 + 버전 리포팅 (앱 폴링) | 불필요 |
-| GET | `/api/v1/{platform}/model/version-stats` | 클라이언트 버전 분포 조회 (최근 24시간 리포트 기준) | 불필요 |
+| POST | `/admin/v1/{platform}/train` | 학습 시작 (비동기, 202) | Basic |
+| GET | `/admin/v1/{platform}/train/status?jobId=` | 학습 진행률·메트릭 조회 | Basic |
+| GET | `/admin/v1/{platform}/runs` | 최근 50개 학습 이력 + best run | Basic |
+| GET | `/admin/v1/{platform}/runs/{run_id}/history?metric=` | 메트릭 step별 시계열 | Basic |
+| POST | `/admin/v1/{platform}/deploy` | 지정 버전 배포 (latest 기록) | Basic |
+| GET | `/ml/v1/{platform}/model/latest?currentVersion=` | 최신 모델 조회 + 버전 리포팅 (앱 폴링) | Bearer JWT |
+| GET | `/admin/v1/{platform}/model/version-stats` | 클라이언트 버전 분포 조회 (최근 24시간 리포트 기준) | Basic |
 
 ## 6. 오류 코드 정리
 

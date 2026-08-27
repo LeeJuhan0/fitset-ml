@@ -3,6 +3,7 @@
 배포는 MLflow run 존재 확인 → latest.json 업데이트. 플랫폼별 모델 확장자
 (ios=.mlpackage.zip / android=.onnx)가 올바른지 검증한다."""
 
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -12,7 +13,11 @@ import app.deployment.service as deploy_mod
 
 
 def _install_fake_mlflow(monkeypatch, experiment, runs):
-    """experiment=None 이면 실험 없음, runs=[] 이면 해당 버전 run 없음."""
+    """experiment=None 이면 실험 없음, runs=[] 이면 해당 버전 run 없음.
+
+    service.deploy가 mlflow를 지연 import(유저 이미지 슬림화)하므로,
+    모듈 속성이 아니라 sys.modules를 갈아끼워 함수 안 import가 가짜를 집게 한다.
+    """
     fake_client = MagicMock()
     fake_client.get_experiment_by_name.return_value = experiment
     fake_client.search_runs.return_value = runs
@@ -21,20 +26,20 @@ def _install_fake_mlflow(monkeypatch, experiment, runs):
         set_tracking_uri=lambda uri: None,
         MlflowClient=lambda: fake_client,
     )
-    monkeypatch.setattr(deploy_mod, "mlflow", fake_mlflow)
+    monkeypatch.setitem(sys.modules, "mlflow", fake_mlflow)
     return fake_client
 
 
 def test_deploy_404_when_no_experiment(admin_client, monkeypatch):
     _install_fake_mlflow(monkeypatch, experiment=None, runs=[])
-    resp = admin_client.post("/api/admin/v1/ios/deploy", json={"version": "v1.3"})
+    resp = admin_client.post("/api/v1/ios/deploy", json={"version": "v1.3"})
     assert resp.status_code == 404
 
 
 def test_deploy_404_when_version_run_missing(admin_client, monkeypatch):
     exp = SimpleNamespace(experiment_id="exp-1")
     _install_fake_mlflow(monkeypatch, experiment=exp, runs=[])
-    resp = admin_client.post("/api/admin/v1/ios/deploy", json={"version": "v9.9"})
+    resp = admin_client.post("/api/v1/ios/deploy", json={"version": "v9.9"})
     assert resp.status_code == 404
 
 
@@ -47,7 +52,7 @@ def test_deploy_success_updates_latest(admin_client, monkeypatch, platform, ext)
     saved = {}
     monkeypatch.setattr(deploy_mod, "put_latest", lambda p, d: saved.update(platform=p, data=d))
 
-    resp = admin_client.post(f"/api/admin/v1/{platform}/deploy", json={"version": "v1.3"})
+    resp = admin_client.post(f"/api/v1/{platform}/deploy", json={"version": "v1.3"})
     assert resp.status_code == 200
 
     body = resp.json()["data"]
@@ -63,5 +68,5 @@ def test_deploy_success_updates_latest(admin_client, monkeypatch, platform, ext)
 
 def test_deploy_requires_version_field(admin_client, monkeypatch):
     _install_fake_mlflow(monkeypatch, experiment=None, runs=[])
-    resp = admin_client.post("/api/admin/v1/ios/deploy", json={})  # version 누락
+    resp = admin_client.post("/api/v1/ios/deploy", json={})  # version 누락
     assert resp.status_code == 400  # Pydantic 검증 실패 — 팀 규약상 400 INVALID_REQUEST

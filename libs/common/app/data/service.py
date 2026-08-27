@@ -4,14 +4,16 @@
 # ─────────────────────────────────────────────────────────────────────────────
 import io
 
-import pandas as pd
-
 from app.data.repository import (   # 이름으로 import — 테스트가 이 네임스페이스를 monkeypatch 한다
+    csv_key,
     download_csv_bytes,
+    generate_presigned_admin_upload_url,
     generate_presigned_user_upload_url,
     get_index,
     get_uploads_index,
+    mark_admin_uploaded,
     mark_user_uploaded,
+    reserve_admin_upload,
     reserve_user_upload,
     upload_csv_key,
 )
@@ -55,6 +57,9 @@ def file_stats(platform: str, filename: str) -> dict | None:
     STATS_TRIM_SECONDS 초를 잘라내고 계산한다. 트림하면 남는 게 없을 만큼
     짧은 파일은 전체 구간으로 계산하고 trim_applied=False로 알린다.
     """
+    # pandas는 이 함수(어드민 통계)만 쓴다 — 유저 서비스 이미지가 pandas 없이 뜨도록 지연 import
+    import pandas as pd
+
     index = get_index(platform)
     entry = next((f for f in index["files"] if f["filename"] == filename), None)
     if entry is None:
@@ -118,3 +123,23 @@ def reject_upload(platform: str, filename: str) -> dict:
     계획: 대장에서 pending 항목 확인 → status=rejected 전이 (객체 삭제 여부는 정책 미정).
     """
     raise NotImplementedError("반려 처리 로직은 구현 예정")
+
+
+def admin_issue_upload_url(platform: str, class_name: str, device_id: str) -> dict:
+    """어드민 직행 업로드 1단계 — dataset 버킷(신뢰 영역)의 raw 경로로 presigned PUT 발급.
+
+    유저 플로우와 달리 격리·승격 없이 학습 인덱스에 바로 예약된다(검증된 데이터 전제).
+    """
+    filename = reserve_admin_upload(platform, class_name, device_id)          # 예약(uploaded=False)
+    url = generate_presigned_admin_upload_url(platform, class_name, filename)  # 서명 URL
+    return {
+        "presignedUrl": url,
+        "expiresIn": PRESIGNED_EXPIRES_SECONDS,
+        "s3Key": csv_key(platform, class_name, filename),   # {platform}/raw/{class}/{filename}
+        "filename": filename,
+    }
+
+
+def admin_confirm_upload(platform: str, filename: str) -> bool:
+    """어드민 업로드 확정 — 학습 인덱스의 예약 항목을 uploaded=True로. 예약 없으면 False."""
+    return mark_admin_uploaded(platform, filename)

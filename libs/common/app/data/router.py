@@ -2,7 +2,7 @@
 # data 도메인 API(controller) — 형식 검증·응답 포장만 하고 유스케이스는 service에 위임.
 # 라우터 2개로 분리 — 호출 주체가 다르면 인증도 다르다:
 #   router(유저, /api/v1):        GET /data/presigned-url, POST /data/upload-confirm — 앱이 직접 호출
-#   admin_router(어드민, /api/admin/v1): GET /data, GET /data/stats — 대시보드/운영 조회
+#   admin_router(어드민 호스트 /api/v1): GET /data, GET /data/stats — 대시보드/운영 조회
 # ─────────────────────────────────────────────────────────────────────────────
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -21,12 +21,11 @@ from app.data.schemas import (
     UploadDecisionData,
 )
 
+# prefix는 각 서비스 main이 등록한다 — 유저 /ml/v1, 어드민 /api/v1 (호스트가 경계)
 router = APIRouter(                             # 유저용 — 앱이 직접 호출, 전 엔드포인트에 JWT 검증
-    prefix="/api/v1",
     dependencies=[Depends(get_current_user_id)],
 )
 admin_router = APIRouter(                       # 어드민용 — 전 엔드포인트에 Basic 인증
-    prefix="/api/admin/v1",
     dependencies=[Depends(check_basic_auth)],
 )
 
@@ -82,6 +81,38 @@ def upload_confirm(
         raise HTTPException(status_code=400, detail=f"지원하지 않는 종목: {body.class_name}")
 
     if not service.confirm_upload(platform, body.filename):
+        raise HTTPException(status_code=404, detail="예약된 파일을 찾을 수 없습니다.")
+
+    return {"trace_id": trace_id, "data": {"filename": body.filename, "class": body.class_name}}
+
+
+# ── 어드민 직행 업로드 — 검증된 데이터를 dataset 버킷에 바로 (승격 불필요, 학습 인덱스 직등록) ──
+
+@admin_router.get("/{platform}/data/presigned-url", response_model=ApiResponse[PresignedUrlData])
+def admin_presigned_url(
+    class_name: str = Query(..., alias="class"),     # 쿼리 ?class= . 종목 라벨
+    device_id: str = Query(..., alias="deviceId"),   # 쿼리 ?deviceId= . 수집 기기 식별자(채번 주인)
+    platform: str = Depends(validate_platform),
+    trace_id: str = Depends(get_trace_id),
+):
+    if not domain.is_supported_class(class_name):
+        raise HTTPException(status_code=400, detail=f"지원하지 않는 종목: {class_name}. 허용: {CLASSES}")
+    if not domain.is_valid_device_id(device_id):
+        raise HTTPException(status_code=400, detail="유효하지 않은 deviceId")
+
+    return {"trace_id": trace_id, "data": service.admin_issue_upload_url(platform, class_name, device_id)}
+
+
+@admin_router.post("/{platform}/data/upload-confirm", response_model=ApiResponse[UploadConfirmData])
+def admin_upload_confirm(
+    body: UploadConfirmRequest,
+    platform: str = Depends(validate_platform),
+    trace_id: str = Depends(get_trace_id),
+):
+    if not domain.is_supported_class(body.class_name):
+        raise HTTPException(status_code=400, detail=f"지원하지 않는 종목: {body.class_name}")
+
+    if not service.admin_confirm_upload(platform, body.filename):
         raise HTTPException(status_code=404, detail="예약된 파일을 찾을 수 없습니다.")
 
     return {"trace_id": trace_id, "data": {"filename": body.filename, "class": body.class_name}}
