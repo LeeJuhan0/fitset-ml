@@ -5,7 +5,7 @@ name: build-images
 
 on:
   push:
-    branches: [main]
+    branches: [dev]   # dev 머지 = stage 이미지 푸시 (main은 prod 프로모션 라인 — infra values-prod 태그 갱신으로 배포)
     paths:
       - "libs/**"
       - "services/**"

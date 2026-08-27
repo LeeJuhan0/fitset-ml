@@ -1,10 +1,11 @@
 # mlflow — 추적 서버 이미지. 빌드 시 EBS 백업 sqlite를 구워 기존 실험·모델 로그를 그대로 조회한다.
 #   빌드 전 준비(git 미추적): aws s3 cp s3://fitset-models/backup/mlflow-20260824.db services/mlflow/mlflow.db
 #   docker buildx build --platform linux/amd64 -f services/mlflow/Dockerfile .
-# k8s에서 PVC를 /mlflow에 마운트하면 굽은 DB 대신 볼륨을 쓴다(BACKEND_STORE_URI로 경로 제어).
+# k8s(EKS)에서는 BACKEND_STORE_URI를 stage RDS MySQL로 주입해 무상태로 뜬다 — 굽은 sqlite는
+# 로컬 조회·마이그레이션 원본용. (클러스터에 EBS CSI가 없어 PVC 불가 — infra README 결정)
 FROM python:3.11-slim
 
-RUN pip install --no-cache-dir mlflow boto3
+RUN pip install --no-cache-dir mlflow boto3 pymysql   # pymysql: 백엔드 스토어 RDS MySQL(mysql+pymysql://) 접속용
 
 # 굽는 스냅샷 — 마운트가 덮으면 볼륨이 우선한다
 COPY services/mlflow/mlflow.db /mlflow/mlflow.db
