@@ -1,86 +1,86 @@
 # FitSet ML Server
 
-운동 자세 분류 모델을 **수집 → 학습 → 평가 → 배포**까지 관리하는 FastAPI 기반 ML 백엔드입니다.
-플랫폼(`ios`/`android`)별로 데이터셋과 모델 버전을 독립적으로 운영합니다.
+스마트워치 IMU 시계열로 운동 종목을 분류하는 온디바이스 모델의 데이터 수집, 학습, 평가, 변환, 배포 전 과정을 담당하는 ML 서버입니다.
 
-## 아키텍처
+## 클라우드 아키텍처
 
-**도메인별 수직 슬라이스(package by feature) + 슬라이스 내부 계층형(router→service→domain→repository) + 런타임 분리(web/worker)** 구조입니다.
-상세 구조도·계층 규칙·핵심 설계 포인트는 [코드 아키텍처 문서](docs/architecture.md)를 참고하세요.
+![클라우드 아키텍처](docs/img/readme/cloud-architecture.png)
 
-## API
+## 시스템 아키텍처
 
-경로는 호출 주체별 2계층입니다. `{platform}`은 `ios` 또는 `android`만 허용됩니다([deps.py](app/deps.py)).
+![시스템 아키텍처](docs/img/readme/system-architecture.png)
 
-| 계층 | prefix | 인증 | 용도 |
-|------|--------|------|------|
-| 유저 | `/api/v1/{platform}` | Bearer JWT — 백엔드 JWKS 공개키(RS256)로 직접 검증, `sub`=userId ([core/auth.py](app/core/auth.py)) | 앱 직접 호출 |
-| 어드민 | `/api/admin/v1/{platform}` | Basic — 팀 공용 계정, `MLFLOW_UI_USER/PASSWORD` ([core/security.py](app/core/security.py)) | 대시보드·운영 |
+## 기술 스택
 
-대시보드 정적 파일("/")과 MLflow 프록시(`/mlflow/*`)도 같은 Basic 계정으로 보호됩니다(미설정 시 503 잠금).
+| 구분 | 기술 |
+|------|------|
+| 서버 | Python, FastAPI |
+| ML | PyTorch, MLflow, Core ML, ONNX |
+| LLM | AWS Bedrock, LangGraph |
+| DB | MySQL(RDS), DynamoDB(NoSQL) |
+| 인프라 | ECS(Fargate), EC2, ALB, Route 53, VPC, NAT Gateway, S3, CloudFront, CloudWatch, SSM |
+| 배포 | Docker, ECR, GitHub Actions |
 
-### 유저 — 데이터 수집·모델 폴링
-| Method | Path | 설명 |
-|--------|------|------|
-| `GET` | `/api/v1/{p}/data/presigned-url?class=&deviceId=` | 격리 버킷 업로드용 presigned URL 발급 (300초). 경로: `fitset-user-uploads/{platform}/{userId}/{filename}`, 채번 주인은 토큰 userId |
-| `POST` | `/api/v1/{p}/data/upload-confirm` | 업로드 대장(uploads-index.json)의 예약 항목을 `uploaded=true`로 확정 |
-| `GET` | `/api/v1/{p}/model/latest?currentVersion=` | 최신 배포 버전·모델 presigned URL·`metaUrl`·`isUpToDate` 반환. 버전 리포팅 기록 |
+## 모델 배포 생애주기
 
-### 어드민 — 데이터·승격 ([data/router.py](app/data/router.py))
-| Method | Path | 설명 |
-|--------|------|------|
-| `GET` | `/api/admin/v1/{p}/data` | 학습 인덱스의 등록 파일 목록 조회 (신뢰 영역) |
-| `GET` | `/api/admin/v1/{p}/data/stats?filename=` | 파일 센서 통계 (트림 적용 채널 요약) |
-| `GET` | `/api/admin/v1/{p}/uploads?status=` | 유저 업로드 대장 조회 (pending/approved/rejected) |
-| `POST` | `/api/admin/v1/{p}/uploads/{filename}/approve\|reject` | 승격 승인·반려 — 인터페이스만 확정, 처리 로직 구현 전(501) |
+![모델 배포 생애주기](docs/img/readme/model-lifecycle.png)
 
-### 어드민 — 학습·배포 ([training/router.py](app/training/router.py) · [deployment/router.py](app/deployment/router.py))
-| Method | Path | 설명 |
-|--------|------|------|
-| `POST` | `/api/admin/v1/{p}/train` | 학습 시작(202). 동일 플랫폼 중복 실행 시 `409` |
-| `GET` | `/api/admin/v1/{p}/train/status?jobId=` | MLflow run 상태/메트릭 조회 |
-| `GET` | `/api/admin/v1/{p}/runs` | 최근 50개 run 목록 + best run |
-| `GET` | `/api/admin/v1/{p}/runs/{run_id}/history?metric=` | 메트릭 시계열 조회 |
-| `POST` | `/api/admin/v1/{p}/deploy` | 지정 버전 배포(latest 기록·롤백 포함) |
-| `GET` | `/api/admin/v1/{p}/model/latest` | 대시보드용 최신 모델 조회(분포 집계 미기록) |
-| `GET` | `/api/admin/v1/{p}/model/version-stats` | 최근 24시간 리포트 기준 버전 분포 조회 |
+## 데이터 실수집
 
-## 분류 종목 (CLASSES)
+![데이터 실수집](docs/img/readme/data-collection.png)
 
-`SQUAT`, `PUSHUP`, `DUMBBELL_CURL`, `SIDE_LATERAL_RAISE`, `REST` ([config.py](app/core/config.py))
+## 모델 성능
 
-## 데이터 흐름
+| 측정 항목 | 수치 | 측정 항목 | 수치 | 측정 항목 | 수치 |
+|------|------|------|------|------|------|
+| val_accuracy | 0.9596 | f1_사레레 | 1.0000 | f1_벤치프레스 | 0.8889 |
+| test_accuracy | 0.9293 | f1_휴식 | 0.9536 | f1_머신 플라이 | 0.8333 |
+| f1_전체 | 0.9209 | f1_오버헤드 프레스 | 0.8750 | f1_힙쓰러스트 | 1.0000 |
+| f1_스쿼트 | 1.0000 | f1_바벨로우 | 0.8571 | f1_시티드 로우 | 0.8000 |
+| f1_푸시업 | 0.9333 | f1_데드리프트 | 0.9167 | f1_딥스 | 1.0000 |
+| f1_덤벨컬 | 0.9600 | f1_랫풀다운 | 0.8750 | | |
 
-```
-[수집]  presigned-url 발급 → 클라이언트가 S3에 직접 업로드 → upload-confirm 으로 인덱스 등록
-[학습]  POST /train → trainer 서브프로세스 → MLflow에 메트릭 기록 → GET /train/status·/runs 로 모니터링
-[배포]  POST /deploy → S3 latest 갱신 → 클라이언트가 GET /model/latest 로 최신 모델 확인
-```
+## 대시보드
 
-## 인프라
+![대시보드](docs/img/readme/dashboard.png)
 
-- **MLflow**: 학습 추적 (EC2 온디맨드 + EBS SQLite — ADR-0017)
-- **S3**: `fitset-dataset`(raw data) / `fitset-models`(모델 artifact) 분리 (ADR-0015)
-- **AWS Region**: `ap-northeast-2`
-- 설정은 [config.py](app/core/config.py)의 `Settings`(`.env` 오버라이드 가능)에서 관리
+![학습 이력, 배포](docs/img/readme/training-history.png)
 
-## 문서
+## 코드 아키텍처
 
-- [코드 아키텍처](docs/architecture.md)
-- [API 명세 — 데이터 수집](docs/api-spec-06-data-collection.md)
-- [API 명세 — ML 학습·서빙](docs/api-spec-07-ml-training-serving.md)
-- [코드 컨벤션](docs/코드%20컨벤션.md)
+| 경로 | 역할 |
+|------|------|
+| app/main.py | 앱 조립, 라우터 등록 |
+| app/deps.py | 공통 의존성 주입 |
+| app/core/ | 설정, 공통 스키마, S3 클라이언트 |
+| app/data/ | 센서 데이터 수집 도메인 |
+| app/training/ | 모델 학습, 이력 도메인 |
+| app/deployment/ | 배포, 모델 서빙 도메인 |
+| app/worker/ | 학습 프로세스 런타임 |
+| app/worker/trainer.py | 학습 엔트리포인트 |
+| app/worker/model_def.py | 모델 정의, 공개본은 스텁 |
+| app/worker/preprocess.py | 전처리 |
+| app/worker/convert.py | Core ML, ONNX 변환 |
+| static/ | 관리 대시보드 |
+| airflow/ | 재학습 파이프라인 |
+| docs/ | 아키텍처, API 명세, ADR |
+| tests/ | 단위, 통합 테스트 |
 
-## 실행
+| 층 | 역할 |
+|------|------|
+| router | HTTP 라우팅, 형식 검증, 응답 직렬화 |
+| service | 유스케이스 조율 |
+| domain | 순수 업무 규칙 |
+| repository | S3, MLflow 접근 |
+| core | 공유 인프라 |
 
-```bash
-uvicorn app.main:app --reload
-```
+## 깃 컨벤션
 
-## 테스트
-
-```bash
-pytest
-```
-
-`tests/`에 API·S3 헬퍼·플랫폼 검증 테스트가 있습니다.
+| 항목 | 규칙 | 예시 |
+|------|------|------|
+| 커밋 메시지 | 타입(스코프): 요약 | fix(training): 업로드 미완료 파일 학습 제외 |
+| 커밋 타입 | feat, fix, docs, test, refactor, ci, chore | |
+| 브랜치 | 타입/케밥 케이스 | feat/per-file-time-split |
+| 이슈 연결 | 제목 끝 (#이슈번호) | feat: MLflow UI 프록시 노출 (#33) |
+| PR | 템플릿 작성, 요약, API 변경, 결정과 근거, 테스트 | |
+| 머지 | main 머지 시 CD 자동 배포 | |
