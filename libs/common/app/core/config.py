@@ -25,10 +25,6 @@ class Settings(BaseSettings):
     # 클래스 번호와 운동 slug 매핑 테이블(공개 CDN, GET /model/latest 의 metaUrl 로 내려감)
     class_mapping_url: str = "https://dtcevtkuvdwt9.cloudfront.net/models/class-mapping.json"
 
-    # 유저 JWT 검증(app/core/auth.py) — 백엔드가 발급한 RS256 access 토큰을 JWKS 공개키로 검증
-    jwks_url: str = "https://api.fitset.kro.kr/.well-known/jwks.json"   # 백엔드 공개키 배포 지점
-    jwt_public_key_pem: str | None = None      # 로컬 개발용 PEM 직접 주입 — 있으면 JWKS 조회를 건너뜀
-
     # MLflow UI 프록시(app/mlflow_proxy.py) — /mlflow/* 를 이 대상으로 중계
     mlflow_proxy_target: str = "http://localhost:5001"   # 원 서버 주소(경로 프리픽스 없이)
     mlflow_ui_user: str = ""       # Basic 인증 계정 — 둘 중 하나라도 비면 프록시 잠금(fail closed)

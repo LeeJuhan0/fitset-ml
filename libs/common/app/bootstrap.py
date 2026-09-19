@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# 공통 앱 조립(bootstrap) — user_api·admin_api 두 서비스가 공유하는 뼈대.
+# 공통 앱 조립(bootstrap) — 서비스 엔트리포인트(admin_api)가 쓰는 뼈대.
 # 응답 규약(성공 {traceId, data} / 실패 {traceId, error})과 관측(traceId 로깅·액세스
 # 로그)은 서비스가 갈라져도 동일해야 하므로 여기가 정본이다.
 # 각 서비스 엔트리포인트는 create_base_app()으로 뼈대를 받고 라우터만 include한다.
@@ -104,7 +104,7 @@ def _register_exception_handlers(app: FastAPI) -> None:
         return error_response(request, 500, _FALLBACK_ERROR_CODE, "서버 내부 오류가 발생했습니다.")
 
 
-# Basic 없이 통과시키는 경로 — API·프록시는 각자 계층 인증(JWT·Basic)을 가지고, 문서·헬스체크는 공개
+# Basic 없이 통과시키는 경로 — API·프록시는 라우터 계층 Basic 인증을 가지고, 문서·헬스체크는 공개
 _STATIC_AUTH_EXEMPT_PREFIXES = ("/api/", "/mlflow", "/docs", "/openapi.json", "/redoc")
 
 

@@ -1,5 +1,7 @@
 # 07. ML 모델 학습 및 서빙 API 명세 (Training & Serving)
 
+> 2026-09-19 유저 서비스(user_api)를 제거했다. 이 문서의 `/ml/v1` 유저 API(Bearer JWT)는 더 이상 이 서버에 없고, 어드민 API만 유효하다.
+
 ## 1. 문서 정보
 
 | 항목 | 내용 |

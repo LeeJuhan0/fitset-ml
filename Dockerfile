@@ -15,7 +15,7 @@ COPY . .
 
 # 멀티모듈 레이아웃 — 공통 코드는 libs/common, 엔트리포인트는 services/* (import 경로는 app.* 유지)
 # 이 루트 Dockerfile은 과도기 통합 이미지(compose 로컬용) — 서비스별 이미지는 services/*/Dockerfile이 정본
-ENV PYTHONPATH=/app/libs/common:/app/services/user_api:/app/services/admin_api
+ENV PYTHONPATH=/app/libs/common:/app/services/admin_api
 
 EXPOSE 8000
 

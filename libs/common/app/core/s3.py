@@ -37,10 +37,6 @@ def _index_key(platform: str) -> str:
 def _uploads_index_key(platform: str) -> str:
     return f"{platform}/uploads-index.json"               # 유저 업로드 대장 (uploads 버킷)
 
-def _upload_csv_key(platform: str, user_id: str, filename: str) -> str:
-    # 유저별 prefix — 동의 철회 시 {platform}/{userId}/ 삭제로 정리 가능
-    return f"{platform}/{user_id}/{filename}"             # 예: ios/user-1/SQUAT_user-1_0001.csv
-
 def _csv_key(platform: str, class_name: str, filename: str) -> str:
     return f"{platform}/raw/{class_name}/{filename}"      # 예: ios/raw/SQUAT/SQUAT_xx_0001.csv
 

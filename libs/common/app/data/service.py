@@ -8,14 +8,10 @@ from app.data.repository import (   # 이름으로 import — 테스트가 이 �
     csv_key,
     download_csv_bytes,
     generate_presigned_admin_upload_url,
-    generate_presigned_user_upload_url,
     get_index,
     get_uploads_index,
     mark_admin_uploaded,
-    mark_user_uploaded,
     reserve_admin_upload,
-    reserve_user_upload,
-    upload_csv_key,
 )
 
 UPLOAD_STATUSES = {"pending", "approved", "rejected"}   # 대장 상태 전이: pending → approved | rejected
@@ -30,26 +26,6 @@ def list_data(platform: str) -> dict:
     return get_index(platform)
 
 
-def issue_upload_url(platform: str, class_name: str, user_id: str, device_id: str) -> dict:
-    """파일명 채번·예약 → presigned PUT URL 발급까지의 업로드 1단계 유스케이스.
-
-    유저 자동수집 경로 — 격리 버킷(user_uploads)의 {platform}/{userId}/ 아래로만 발급한다.
-    """
-    filename = reserve_user_upload(platform, class_name, user_id, device_id)   # 예약(uploaded=False, pending)
-    url = generate_presigned_user_upload_url(platform, user_id, filename)      # 서명 URL
-    return {
-        "presignedUrl": url,                                 # 앱이 이 URL로 CSV를 직접 PUT
-        "expiresIn": PRESIGNED_EXPIRES_SECONDS,              # URL 유효시간(초)
-        "s3Key": upload_csv_key(platform, user_id, filename),  # 업로드 경로(격리 버킷 내)
-        "filename": filename,                                # 서버가 부여한 파일명(앱이 upload-confirm에 다시 보냄)
-    }
-
-
-def confirm_upload(platform: str, filename: str) -> bool:
-    """S3 PUT 완료 후 업로드 대장의 예약 항목을 uploaded=True로 확정. 예약이 없으면 False."""
-    return mark_user_uploaded(platform, filename)
-
-
 def file_stats(platform: str, filename: str) -> dict | None:
     """센서 CSV의 채널별 mean/min/max/std 요약. 파일이 인덱스에 없으면 None.
 
@@ -57,7 +33,7 @@ def file_stats(platform: str, filename: str) -> dict | None:
     STATS_TRIM_SECONDS 초를 잘라내고 계산한다. 트림하면 남는 게 없을 만큼
     짧은 파일은 전체 구간으로 계산하고 trim_applied=False로 알린다.
     """
-    # pandas는 이 함수(어드민 통계)만 쓴다 — 유저 서비스 이미지가 pandas 없이 뜨도록 지연 import
+    # pandas는 이 함수(통계)만 쓴다 — 임포트 비용을 이 경로로 미루는 지연 import
     import pandas as pd
 
     index = get_index(platform)

@@ -1,11 +1,11 @@
-# 서비스 이미지 3종(user-api·admin-api·mlflow)을 빌드해 ECR에 푸시한다.
+# 서비스 이미지 2종(admin-api·mlflow)을 빌드해 ECR에 푸시한다.
 # 배포는 하지 않는다 — 배포 대상(ECS·k8s)은 별도 파이프라인/매니페스트가 담당.
 # 테스트 게이트는 PR의 test.yml이 담당하므로 여기서는 재실행하지 않는다(머지 = 통과 전제).
 name: build-images
 
 on:
   push:
-    branches: [dev]   # dev 머지 = stage 이미지 푸시 (main은 prod 프로모션 라인 — infra values-prod 태그 갱신으로 배포)
+    branches: [main]
     paths:
       - "libs/**"
       - "services/**"
@@ -27,8 +27,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - name: fitset-ml-user-api
-            dockerfile: services/user_api/Dockerfile
           - name: fitset-ml-admin-api
             dockerfile: services/admin_api/Dockerfile
           - name: fitset-mlflow

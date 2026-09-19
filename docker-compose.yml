@@ -35,17 +35,3 @@ services:
     depends_on:
       - mlflow
     restart: always
-
-  user-api:
-    # 유저 트래픽 서비스 — JWT 인증 3개 엔드포인트만
-    build: .
-    image: fitset-ml-server:latest
-    command: uvicorn user_api.main:app --host 0.0.0.0 --port 8001
-    ports:
-      - "8001:8001"
-    environment:
-      RAW_DATA_BUCKET: fitset-dataset
-      MODELS_BUCKET: fitset-models
-      USER_UPLOADS_BUCKET: fitset-user-uploads
-      AWS_REGION: ap-northeast-2
-    restart: always

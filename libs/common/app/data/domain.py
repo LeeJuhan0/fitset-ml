@@ -19,11 +19,6 @@ def is_valid_device_id(device_id: str) -> bool:
     return bool(SAFE_ID_RE.match(device_id))
 
 
-def is_valid_user_id(user_id: str) -> bool:
-    # 토큰 sub가 S3 키 prefix로 들어간다 — 백엔드 발급이라도 형식은 방어
-    return bool(SAFE_ID_RE.match(user_id))
-
-
 def make_filename(class_name: str, owner_id: str, seq: int) -> str:
     # 파일명 규칙: {CLASS}_{ownerId}_{NNNN}.csv (순번 4자리) — 유저 수집은 userId가 주인
     return f"{class_name}_{owner_id}_{seq:04d}.csv"

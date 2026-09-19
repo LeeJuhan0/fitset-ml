@@ -4,7 +4,7 @@
 #   /mlflow/*       (MLflow UI 역프록시 — 대상은 env MLFLOW_PROXY_TARGET)
 #   /               (정적 대시보드 — 정적 Basic 가드 포함, protect_static=True)
 # 경로 정본은 /api/v1 — 어드민 호스트(admin-stage.*)가 경계라 경로에 admin을 중복하지
-# 않는다(2026-08-27). 유저 서비스는 api-stage.* 호스트의 /ml/v1 — 호스트+prefix가 다 다르다.
+# 않는다(2026-08-27). 유저 서비스(user_api, /ml/v1)는 2026-09-19 제거 — 이 서비스가 유일한 API다.
 # 학습 worker(subprocess)는 이 서비스 이미지에 함께 실린다.
 # 실행: uvicorn admin_api.main:app  (PYTHONPATH: libs/common, services/admin_api)
 # ─────────────────────────────────────────────────────────────────────────────

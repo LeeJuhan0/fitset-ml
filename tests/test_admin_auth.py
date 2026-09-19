@@ -44,16 +44,6 @@ def test_unset_credentials_lock_503(client, monkeypatch):
     assert resp.json()["error"]["code"] == "ADMIN_AUTH_LOCKED"
 
 
-def test_user_endpoints_do_not_require_basic(user_client, monkeypatch):
-    # 유저 서비스는 Basic 의존성이 없어야 한다 — 어드민 잠금과 무관하게 JWT만으로 동작
-    import app.deployment.service as model_mod
-    monkeypatch.setattr(settings, "mlflow_ui_user", "")
-    monkeypatch.setattr(settings, "mlflow_ui_password", "")
-    monkeypatch.setattr(model_mod, "get_latest", lambda p: None)
-    resp = user_client.get("/ml/v1/ios/model/latest")
-    assert resp.status_code == 404   # 503/401이 아니라 도메인 결과(배포 없음)
-
-
 # ── 정적 대시보드("/" 마운트) Basic 보호 — static_basic_auth_middleware ──
 
 def test_static_dashboard_requires_basic(admin_client):

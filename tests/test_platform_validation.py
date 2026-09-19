@@ -6,8 +6,7 @@ import pytest
 
 # (픽스처 이름, method, path 템플릿) — 모든 라우터가 validate_platform 의존성을 공유한다.
 ENDPOINTS = [
-    ("user_client", "get", "/ml/v1/{p}/data/presigned-url?filename=a.csv&class=SQUAT"),
-    ("user_client", "get", "/ml/v1/{p}/model/latest"),
+    ("admin_client", "get", "/api/v1/{p}/model/latest"),
     ("admin_client", "get", "/api/v1/{p}/data"),
     ("admin_client", "get", "/api/v1/{p}/train/status?jobId=x"),
     ("admin_client", "get", "/api/v1/{p}/model/version-stats"),
@@ -18,7 +17,7 @@ ENDPOINTS = [
 @pytest.mark.parametrize("fixture,method,path", ENDPOINTS)
 @pytest.mark.parametrize("bad", ["web", "iOS", "android2", "watchos", ""])
 def test_invalid_platform_returns_400(request, fixture, method, path, bad):
-    http = request.getfixturevalue(fixture)   # user_client | admin_client
+    http = request.getfixturevalue(fixture)
     url = path.format(p=bad)
     resp = getattr(http, method)(url)
     # 빈 문자열은 라우트 미스로 404가 날 수 있으므로 제외 처리

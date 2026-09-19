@@ -45,11 +45,6 @@ def _read(client) -> dict:
     return json.loads(obj["Body"].read())
 
 
-def _read_uploads(client) -> dict:
-    obj = client.get_object(Bucket=settings.user_uploads_bucket, Key="ios/uploads-index.json")
-    return json.loads(obj["Body"].read())
-
-
 def test_get_index_empty_when_absent(s3_backed):
     # 객체가 없으면 NoSuchKey → 빈 인덱스 폴백 (실제 S3 에러 경로)
     assert s3.get_index("ios") == {"platform": "ios", "files": []}
@@ -61,52 +56,6 @@ def test_update_index_creates_then_appends(s3_backed):
 
     names = [f["filename"] for f in _read(s3_backed)["files"]]
     assert names == ["a.csv", "b.csv"]
-
-
-def test_reserve_user_upload_assigns_sequential_names(s3_backed):
-    # 같은 class+userId → 순번 증가, 다른 userId → 별도 순번 (채번 주인 = 토큰 userId)
-    f1 = data_repo.reserve_user_upload("ios", "SQUAT", "user1", "DEV1")
-    f2 = data_repo.reserve_user_upload("ios", "SQUAT", "user1", "DEV1")
-    f3 = data_repo.reserve_user_upload("ios", "SQUAT", "user2", "DEV1")
-    assert f1 == "SQUAT_user1_0001.csv"
-    assert f2 == "SQUAT_user1_0002.csv"
-    assert f3 == "SQUAT_user2_0001.csv"
-
-    entry = next(f for f in _read_uploads(s3_backed)["uploads"] if f["filename"] == f1)
-    assert entry["uploaded"] is False           # 예약 상태
-    assert entry["status"] == "pending"         # 승격 전 격리 상태
-    assert entry["userId"] == "user1"
-    assert entry["deviceId"] == "DEV1"          # 기기 구분 메타
-
-
-def test_mark_user_uploaded_flips_flag(s3_backed):
-    fn = data_repo.reserve_user_upload("ios", "PUSHUP", "user1", "DEV1")
-    data_repo.mark_user_uploaded("ios", fn)
-    entry = next(f for f in _read_uploads(s3_backed)["uploads"] if f["filename"] == fn)
-    assert entry["uploaded"] is True
-    assert entry["status"] == "pending"         # 업로드 확정은 승격이 아니다
-
-
-def test_reserve_user_upload_concurrent_no_duplicate_numbers(s3_backed):
-    """동시 예약 — 실제 S3(moto) 조건부 쓰기 위에서 번호 중복이 없어야 한다."""
-    import threading
-
-    names: list[str] = []
-    lock = threading.Lock()
-
-    def worker():
-        fn = data_repo.reserve_user_upload("ios", "REST", "user1", "DEV1")
-        with lock:
-            names.append(fn)
-
-    threads = [threading.Thread(target=worker) for _ in range(4)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-
-    assert len(set(names)) == 4  # 4개 모두 고유
-    assert sorted(names) == [f"REST_user1_000{i}.csv" for i in range(1, 5)]
 
 
 def test_update_index_survives_real_concurrent_write(s3_backed):

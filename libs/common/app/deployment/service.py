@@ -32,7 +32,7 @@ def _prune(platform: str):
 
 def deploy(platform: str, version: str) -> dict:
     """지정 버전을 latest.json에 기록하는 배포 유스케이스 (롤백 = 과거 버전 재배포)."""
-    # mlflow는 배포(어드민)만 쓴다 — 유저 서비스 이미지가 mlflow 없이 뜨도록 지연 import
+    # mlflow는 배포만 쓴다 — 임포트 비용을 이 경로로 미루는 지연 import
     import mlflow
 
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
