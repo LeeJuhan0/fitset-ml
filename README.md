@@ -66,7 +66,13 @@
 
 ## 컨테이너
 
-이미지는 2종이고 빌드 컨텍스트는 레포 루트입니다. main에 머지되면 [build-images.yml](.github/workflows/build-images.yml)이 ECR에 `{커밋 SHA}`와 `latest` 태그로 푸시합니다. 배포 매니페스트는 이 레포에 없습니다.
+이미지는 2종이고 빌드 컨텍스트는 레포 루트입니다. `develop`에 머지되면 [cd.yml](.github/workflows/cd.yml)이 ECR에 `{커밋 SHA}` 태그로 푸시하고, SSM SendCommand로 dev 인스턴스의 컨테이너를 교체합니다.
+
+무엇을 어떻게 띄울지는 `s3://fitset-deploy-artifacts/dev/ml-compose/`의 `docker-compose.yml`·`up.sh`가 정하고, 인스턴스·ALB·IAM은 [fitset-infra-tf](https://github.com/asm-hangang/fitset-infra-tf)가 만듭니다.
+
+dev 주소는 `https://ml-dev.fitset.kro.kr`이며 ALB가 **호스트로** 가릅니다 — `/api/v1`이 백엔드와 겹치고 `/`에 대시보드를 마운트해서 경로로는 갈리지 않습니다. `/api/health`만 공개고 나머지는 Basic 인증 뒤에 있습니다.
+
+비밀값(`MLFLOW_UI_USER`·`MLFLOW_UI_PASSWORD`)은 SSM SecureString에서 읽어 compose 프로세스 환경으로만 넘깁니다 — 디스크에 쓰지 않습니다.
 
 | 이미지 | Dockerfile | 포트 | 헬스체크 |
 |--------|-----------|------|----------|
