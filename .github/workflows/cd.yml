@@ -74,6 +74,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # 빌드는 별도 잡(매트릭스 2개)이라 이 잡에서는 시작 시각을 알 수 없다.
+      # 여기서 재는 것은 배포 구간뿐이고, 전체 시간은 Actions 의 실행 시간을 본다.
+      - name: 소요 시간 측정 시작
+        id: timer
+        run: echo "start=$(date +%s)" >> "$GITHUB_OUTPUT"
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -131,3 +137,78 @@ jobs:
           done
           echo "::error::ALB 를 통한 확인에 실패했다. $ML_HOST 의 DNS 레코드가 등록됐는지 본다."
           exit 1
+
+      - name: 핏봇 배포 결과 알림
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          JOB_STATUS: ${{ job.status }}
+          START_TS: ${{ steps.timer.outputs.start }}
+          BUILT_TS: ${{ steps.timer-build.outputs.built }}
+          SERVICE: ml-admin-api
+          TARGET_URL: https://ml-dev.fitset.kro.kr
+          FAILED_STEP: ${{ steps.send.outcome == 'failure' && 'SSM 배포 명령' || '배포 검증' }}
+        run: |
+          # 웹훅이 없는 레포에서 배포 자체를 실패로 만들지 않는다.
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL 미설정 — 알림 생략"
+            exit 0
+          fi
+
+          fmt() {  # 초 → "8분 11초"
+            if [ "$1" -lt 60 ]; then printf '%d초' "$1"; else printf '%d분 %d초' $(( $1 / 60 )) $(( $1 % 60 )); fi
+          }
+          NOW=$(date +%s)
+          START=${START_TS:-$NOW}
+          TOTAL=$(fmt $(( NOW - START )))
+
+          # 빌드 전에 깨지면 단계별 내역 자체가 없다.
+          BREAKDOWN=""
+          if [ -n "$BUILT_TS" ]; then
+            BREAKDOWN="이미지 빌드 $(fmt $(( BUILT_TS - START )))"
+            if [ "$NOW" -gt "$BUILT_TS" ]; then
+              BREAKDOWN="$BREAKDOWN  ·  배포 $(fmt $(( NOW - BUILT_TS )))"
+            fi
+          fi
+
+          if [ "$JOB_STATUS" = "success" ]; then
+            EMOJI=":rocket:"; HEADLINE="배포 성공"; COLOR="#2eb886"; STAGE=""
+          else
+            EMOJI=":rotating_light:"; HEADLINE="배포 실패"; COLOR="#d73a4a"; STAGE="$FAILED_STEP"
+          fi
+
+          jq -n \
+            --arg emoji "$EMOJI" --arg headline "$HEADLINE" --arg color "$COLOR" \
+            --arg service "$SERVICE" --arg subject "커밋 열기" \
+            --arg sha "${GITHUB_SHA:0:7}" \
+            --arg shaurl "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" \
+            --arg runurl "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --arg actor "$GITHUB_ACTOR" --arg total "$TOTAL" --arg breakdown "$BREAKDOWN" \
+            --arg target "$TARGET_URL" --arg branch "$GITHUB_REF_NAME" \
+            --arg run "$GITHUB_RUN_NUMBER" --arg stage "$STAGE" \
+            '
+            def field($label; $value): { type: "mrkdwn", text: ("*" + $label + "*\n" + $value) };
+            {
+              text: ($headline + " — " + $service + " " + $sha + " (" + $total + ")"),
+              attachments: [{
+                color: $color,
+                blocks: [
+                  { type: "header",
+                    text: { type: "plain_text", text: ($emoji + " " + $headline + " · " + $service), emoji: true } },
+                  { type: "section",
+                    text: { type: "mrkdwn", text: ("<" + $shaurl + "|`" + $sha + "`>  " + $subject) } },
+                  { type: "section",
+                    fields: ( [ field("소요 시간"; $total), field("이미지 태그"; $sha) ]
+                              + (if $breakdown == "" then [] else [ field("단계별"; $breakdown) ] end)
+                              + (if $stage == "" then [ field("주소"; $target) ] else [ field("실패 단계"; $stage) ] end)
+                              + [ field("배포자"; $actor) ] ) },
+                  { type: "actions",
+                    elements: [ { type: "button",
+                                  text: { type: "plain_text", text: "실행 로그 보기" },
+                                  url: $runurl } ] },
+                  { type: "context",
+                    elements: [ { type: "mrkdwn", text: ("`" + $branch + "` 브랜치  ·  실행 #" + $run) } ] }
+                ]
+              }]
+            }' \
+            | curl -sS --fail-with-body -X POST -H 'Content-Type: application/json' -d @- "$SLACK_WEBHOOK_URL"
