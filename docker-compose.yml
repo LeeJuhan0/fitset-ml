@@ -1,7 +1,9 @@
 services:
   mlflow:
-    build: .
-    image: fitset-ml-server:latest
+    build:
+      context: .
+      dockerfile: mlflow/Dockerfile
+    image: fitset-mlflow:latest
     command: >
       mlflow server
       --backend-store-uri sqlite:////mlflow/mlflow.db
@@ -18,10 +20,9 @@ services:
     restart: always
 
   api:
-    # 어드민 서비스 — 대시보드·mlflow 프록시·학습 worker 포함
+    # 어드민 서비스 — 정적 대시보드·API·파일 목록(sqlite)·학습/라벨링 worker 포함
     build: .
-    image: fitset-ml-server:latest
-    command: uvicorn admin_api.main:app --host 0.0.0.0 --port 8000
+    image: fitset-ml-admin-api:latest
     ports:
       - "8000:8000"
     environment:
@@ -31,7 +32,14 @@ services:
       MLFLOW_UI_PASSWORD: ${MLFLOW_UI_PASSWORD:-}        # 미설정이면 프록시 잠금(fail closed)
       RAW_DATA_BUCKET: fitset-dataset
       MODELS_BUCKET: fitset-models
+      COLLECT_IMU_BUCKET: fitset-collect-imu
+      COLLECT_VIDEO_BUCKET: fitset-collect-video
+      COLLECT_LABELED_BUCKET: fitset-collect-labeled
+      PHASE_MODELS_BUCKET: fitset-phase-models
       AWS_REGION: ap-northeast-2
+      DATABASE_URL: sqlite+aiosqlite:////data/fitset_ml.db          # 파일 목록. 볼륨에 두어 컨테이너 교체에도 남는다
+    volumes:
+      - /mlflow/data:/data
     depends_on:
       - mlflow
     restart: always

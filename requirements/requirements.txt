@@ -9,8 +9,13 @@ mlflow
 torch==2.12.1+cpu
 numpy
 pandas
+pyarrow         # parquet 읽기 쓰기 (라벨 결과, 승격 데이터셋)
+scipy           # phase_algo 의 savgol·medfilt, 웹 이미지에서도 import 된다
 scikit-learn
 pydantic-settings
+sqlmodel        # 파일 목록 엔티티(SQLModel = SQLAlchemy + Pydantic)
+aiosqlite       # DATABASE_URL=sqlite+aiosqlite:// 비동기 드라이버
+aiomysql        # MySQL 로 갈 때 mysql+aiomysql://
 python-multipart
 httpx          # MLflow UI 역프록시(app/mlflow_proxy.py)의 중계 클라이언트
 

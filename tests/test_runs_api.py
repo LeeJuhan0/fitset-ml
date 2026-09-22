@@ -1,5 +1,3 @@
-"""MLflow run 목록/메트릭 히스토리 API (app.training) — MLflow 가짜 대체."""
-
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -49,8 +47,8 @@ def test_runs_lists_and_picks_best(admin_client, monkeypatch):
     exp = SimpleNamespace(experiment_id="exp-1")
     runs = [
         _run("run-1", "v1.0", "FINISHED", val_acc=0.80),
-        _run("run-2", "v1.1", "FINISHED", val_acc=0.92),  # best
-        _run("run-3", "v1.2", "RUNNING", val_acc=0.99),   # 미완료 → 제외
+        _run("run-2", "v1.1", "FINISHED", val_acc=0.92),
+        _run("run-3", "v1.2", "RUNNING", val_acc=0.99),
     ]
     _install(monkeypatch, experiment=exp, search_results=runs)
 
@@ -59,9 +57,9 @@ def test_runs_lists_and_picks_best(admin_client, monkeypatch):
     assert data["bestRunId"] == "run-2"
 
     first = data["runs"][0]
-    assert first["params"]["numFiles"] == 2  # files 길이 파싱
+    assert first["params"]["numFiles"] == 2
     assert first["params"]["epochs"] == 100
-    assert first["duration"] == 3  # (4000-1000)/1000
+    assert first["duration"] == 3
 
 
 def test_runs_metric_history(admin_client, monkeypatch):

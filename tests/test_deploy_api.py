@@ -1,8 +1,3 @@
-"""모델 배포 API (app.deployment) — MLflow·S3 의존은 service 네임스페이스에서 가짜로 대체.
-
-배포는 MLflow run 존재 확인 → latest.json 업데이트. 플랫폼별 모델 확장자
-(ios=.mlpackage.zip / android=.onnx)가 올바른지 검증한다."""
-
 import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -13,11 +8,7 @@ import app.deployment.service as deploy_mod
 
 
 def _install_fake_mlflow(monkeypatch, experiment, runs):
-    """experiment=None 이면 실험 없음, runs=[] 이면 해당 버전 run 없음.
-
-    service.deploy가 mlflow를 지연 import(유저 이미지 슬림화)하므로,
-    모듈 속성이 아니라 sys.modules를 갈아끼워 함수 안 import가 가짜를 집게 한다.
-    """
+    """experiment=None 이면 실험 없음, runs=[] 이면 해당 버전 run 없음"""
     fake_client = MagicMock()
     fake_client.get_experiment_by_name.return_value = experiment
     fake_client.search_runs.return_value = runs
@@ -59,7 +50,6 @@ def test_deploy_success_updates_latest(admin_client, monkeypatch, platform, ext)
     assert body["deployedVersion"] == "v1.3"
     assert body["platform"] == platform
 
-    # latest.json 내용 검증
     assert saved["platform"] == platform
     assert saved["data"]["version"] == "v1.3"
     assert saved["data"]["mlflowRunId"] == "run-abc"
@@ -68,5 +58,5 @@ def test_deploy_success_updates_latest(admin_client, monkeypatch, platform, ext)
 
 def test_deploy_requires_version_field(admin_client, monkeypatch):
     _install_fake_mlflow(monkeypatch, experiment=None, runs=[])
-    resp = admin_client.post("/api/v1/ios/deploy", json={})  # version 누락
-    assert resp.status_code == 400  # Pydantic 검증 실패 — 팀 규약상 400 INVALID_REQUEST
+    resp = admin_client.post("/api/v1/ios/deploy", json={})
+    assert resp.status_code == 400

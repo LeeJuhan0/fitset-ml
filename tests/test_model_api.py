@@ -1,8 +1,3 @@
-"""모델 조회 + 버전 분포 (app.deployment).
-
-version-stats 는 인메모리 시간 윈도우 집계라 테스트마다 상태를 초기화한다.
-패치 대상은 유스케이스가 사는 service 네임스페이스."""
-
 import pytest
 
 import app.deployment.service as model_mod
@@ -17,7 +12,6 @@ def reset_reports():
 
 @pytest.fixture(autouse=True)
 def stub_presign(monkeypatch):
-    # 실제 AWS 서명 없이 presigned URL 변환만 흉내낸다.
     monkeypatch.setattr(
         model_mod, "generate_presigned_model_download_url",
         lambda url: f"https://signed.example/{url.removeprefix('s3://')}",
@@ -37,15 +31,13 @@ def test_model_latest_up_to_date_flag(admin_client, monkeypatch):
     )
 
     same = model_mod.latest("ios", "v1.3")
-    assert same["latestVersion"] == "v1.3"
-    assert same["isUpToDate"] is True
-    # 앱에는 s3:// 정본이 아니라 다운로드 가능한 서명 URL이 내려간다
-    assert same["modelUrl"] == "https://signed.example/m/ios/v1.3/FitSet.mlpackage"
-    # 클래스 번호와 운동 slug 매핑 테이블은 공개 CDN URL로 내려간다
-    assert same["metaUrl"] == "https://dtcevtkuvdwt9.cloudfront.net/models/class-mapping.json"
+    assert same.latest_version == "v1.3"
+    assert same.is_up_to_date is True
+    assert same.model_url == "https://signed.example/m/ios/v1.3/FitSet.mlpackage"
+    assert same.meta_url == "https://d31w3ih1t93w7x.cloudfront.net/models/class-mapping.json"
 
     older = model_mod.latest("ios", "v1.0")
-    assert older["isUpToDate"] is False
+    assert older.is_up_to_date is False
 
 
 def test_model_latest_records_version_report(admin_client, monkeypatch):
@@ -53,7 +45,6 @@ def test_model_latest_records_version_report(admin_client, monkeypatch):
         model_mod, "get_latest",
         lambda p: {"version": "v1.3", "modelUrl": "s3://m"},
     )
-    # 버전 리포팅 시뮬레이션(서비스 직접 호출): v1.3 두 번, v1.2 한 번 (윈도우 안이므로 전부 집계)
     model_mod.latest("ios", "v1.3")
     model_mod.latest("ios", "v1.3")
     model_mod.latest("ios", "v1.2")
@@ -63,15 +54,12 @@ def test_model_latest_records_version_report(admin_client, monkeypatch):
     assert stats["totalReports"] == 3
     counts = {s["version"]: s["count"] for s in stats["stats"]}
     assert counts == {"v1.3": 2, "v1.2": 1}
-    # 정렬: count 내림차순
     assert stats["stats"][0]["version"] == "v1.3"
-    # ratio 합 ≈ 1.0
     assert abs(sum(s["ratio"] for s in stats["stats"]) - 1.0) < 0.01
 
 
 def test_old_reports_expire_from_window(admin_client, monkeypatch):
     monkeypatch.setattr(model_mod, "get_latest", lambda p: {"version": "v1.3", "modelUrl": "s3://m"})
-    # 교체 전(v1.2) 리포트가 윈도우(24h)보다 오래됨 — 조회 시 만료되어 빠져야 한다
     model_mod._reports["ios"].append((0.0, "v1.2"))
     model_mod.latest("ios", "v1.3")
 
@@ -83,7 +71,6 @@ def test_old_reports_expire_from_window(admin_client, monkeypatch):
 
 def test_report_ignored_without_current_version(admin_client, monkeypatch):
     monkeypatch.setattr(model_mod, "get_latest", lambda p: {"version": "v1.3", "modelUrl": "s3://m"})
-    # currentVersion 없이 조회하면 모델 조회는 정상, 분포 집계에는 반영 안 됨
     resp = admin_client.get("/api/v1/ios/model/latest")
     assert resp.status_code == 200
 
@@ -96,13 +83,11 @@ def test_version_stats_isolated_per_platform(admin_client, monkeypatch):
     monkeypatch.setattr(model_mod, "get_latest", lambda p: {"version": "v1.0", "modelUrl": "s3://m"})
     model_mod.latest("ios", "v1.0")
 
-    # android 는 별도 집계 → 비어 있어야 함
     android = admin_client.get("/api/v1/android/model/version-stats").json()["data"]
     assert android["stats"] == []
 
 
 def test_admin_latest_alias_does_not_pollute_stats(admin_client, monkeypatch):
-    # 대시보드 알리아스 — Basic으로 조회 가능, currentVersion을 안 받아 분포 집계 미기록
     monkeypatch.setattr(model_mod, "get_latest", lambda p: {"version": "v1.3", "modelUrl": "s3://m"})
     resp = admin_client.get("/api/v1/ios/model/latest")
     assert resp.status_code == 200

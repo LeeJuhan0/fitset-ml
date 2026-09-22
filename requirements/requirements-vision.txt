@@ -1,0 +1,5 @@
+# 구간 라벨링 워커(app/worker/phase_labeler.py) 전용 의존성 — 영상 디코딩과 MediaPipe Pose.
+#   pip install -r requirements.txt -r requirements-vision.txt
+# mediapipe 1.x 는 macOS 에서 "Service is unavailable" 크래시가 나서 0.10 계열로 고정한다 (2026-09-22 확인).
+mediapipe<1
+opencv-python-headless

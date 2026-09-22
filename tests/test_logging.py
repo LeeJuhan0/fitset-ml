@@ -1,7 +1,6 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# traceId 로깅 — ContextVar 첨부 필터(core/logging.py)와 미들웨어 액세스 로그(main.py).
-# ─────────────────────────────────────────────────────────────────────────────
 import logging
+
+from conftest import async_
 
 from app.core.logging import _TraceIdFilter, trace_id_var
 
@@ -21,7 +20,6 @@ def test_filter_attaches_trace_id_from_contextvar():
 
 
 def test_filter_defaults_to_dash_outside_request():
-    # 요청 밖(부팅·워커) 문맥 — default "-"
     record = _record()
     _TraceIdFilter().filter(record)
     assert record.trace_id == "-"
@@ -36,7 +34,7 @@ def test_filter_respects_preset_trace_id():
 
 def test_access_log_emitted_with_method_status(admin_client, caplog, monkeypatch):
     import app.data.service as data_mod
-    monkeypatch.setattr(data_mod, "get_index", lambda p: {"platform": "ios", "files": []})
+    monkeypatch.setattr(data_mod, "list_files", async_(lambda s, p: []))
 
     with caplog.at_level(logging.INFO, logger="fitset-ml"):
         admin_client.get("/api/v1/ios/data")
@@ -55,7 +53,6 @@ def test_access_log_skips_health(client, caplog):
 
 
 def test_access_log_level_follows_status(client, caplog):
-    # 인증 없는 어드민 호출 → 401 → WARNING 레벨 액세스 로그
     with caplog.at_level(logging.INFO, logger="fitset-ml"):
         client.get("/api/v1/ios/data")
     access = [r for r in caplog.records
@@ -66,4 +63,4 @@ def test_access_log_level_follows_status(client, caplog):
 
 def test_contextvar_reset_after_request(client):
     client.get("/api/health")
-    assert trace_id_var.get() == "-"   # 요청 문맥이 반납돼 다음 요청에 안 샌다
+    assert trace_id_var.get() == "-"

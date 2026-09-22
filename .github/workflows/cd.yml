@@ -6,8 +6,9 @@ on:
   push:
     branches: [develop]
     paths:
-      - "libs/**"
-      - "services/**"
+      - "app/**"
+      - "mlflow/**"
+      - "Dockerfile"
       - "requirements/**"
       - ".github/workflows/cd.yml"
   workflow_dispatch: {}
@@ -33,9 +34,9 @@ jobs:
       matrix:
         include:
           - name: fitset-ml-admin-api
-            dockerfile: services/admin_api/Dockerfile
+            dockerfile: Dockerfile
           - name: fitset-mlflow
-            dockerfile: services/mlflow/Dockerfile
+            dockerfile: mlflow/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -52,7 +53,7 @@ jobs:
       # mlflow 이미지는 스냅샷 DB 를 굽는다 — 빌드 자산이라 git 에 없고 S3 백업에서 받는다
       - name: Fetch mlflow snapshot db
         if: matrix.name == 'fitset-mlflow'
-        run: aws s3 cp s3://fitset-models/backup/mlflow-20260824.db services/mlflow/mlflow.db
+        run: aws s3 cp s3://fitset-models/backup/mlflow-20260824.db mlflow/mlflow.db
 
       - uses: docker/setup-buildx-action@v3
 

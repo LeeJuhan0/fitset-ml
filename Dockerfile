@@ -1,22 +1,26 @@
+# 관리자 웹서버 이미지. 정적 대시보드, API, 파일 목록(sqlite), 학습·라벨링 worker(subprocess) 포함.
+#   docker buildx build --platform linux/amd64 -t fitset-ml-admin-api .
 FROM python:3.11-slim
 
-WORKDIR /app
+WORKDIR /srv
 
+# libgl1·libglib2.0-0 은 mediapipe 가 끌고 오는 opencv-contrib-python 이 import 때 요구한다
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
+    build-essential libgl1 libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# base + 변환 의존성 — 워커가 컨테이너 안에서 iOS .mlpackage(coremltools)와
-# Android .onnx(torch.onnx.export + onnx) 변환을 수행. 둘 다 t3.small에서 동작하는 무게.
-COPY requirements/requirements.txt requirements/requirements-convert.txt ./
-RUN pip install --no-cache-dir -r requirements.txt -r requirements-convert.txt
+COPY requirements/requirements.txt requirements/requirements-convert.txt requirements/requirements-vision.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-convert.txt -r requirements-vision.txt
 
-COPY . .
+ADD https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task /srv/models/pose_landmarker_full.task
 
-# 멀티모듈 레이아웃 — 공통 코드는 libs/common, 엔트리포인트는 services/* (import 경로는 app.* 유지)
-# 이 루트 Dockerfile은 과도기 통합 이미지(compose 로컬용) — 서비스별 이미지는 services/*/Dockerfile이 정본
-ENV PYTHONPATH=/app/libs/common:/app/services/admin_api
+COPY app /srv/app
+COPY scripts /srv/scripts
+COPY db /srv/db
+
+ENV PYTHONPATH=/srv
+ENV POSE_MODEL_PATH=/srv/models/pose_landmarker_full.task
 
 EXPOSE 8000
 
-CMD ["uvicorn", "admin_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
