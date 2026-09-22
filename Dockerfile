@@ -4,9 +4,9 @@ FROM python:3.11-slim
 
 WORKDIR /srv
 
-# libgl1·libglib2.0-0 은 mediapipe 가 끌고 오는 opencv-contrib-python 이 import 때 요구한다
+# libgl1·libglib2.0-0 은 opencv 가 import 때, libgles2·libegl1 은 mediapipe tasks C 바인딩(libmediapipe.so) 로드 때 요구한다
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libgl1 libglib2.0-0 \
+    build-essential libgl1 libglib2.0-0 libgles2 libegl1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements/requirements.txt requirements/requirements-convert.txt requirements/requirements-vision.txt ./
