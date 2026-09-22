@@ -711,7 +711,7 @@ async function api(method, path, body) {
 let allFiles = [];
 let page = 1;
 let rowsPerPage = 10;
-let sortKey = null;      // 'filename' | 'class' | 'collectedAt'
+let sortKey = null;      // 'filename' | 'class' | 'createdAt'
 let sortDir = 1;         // 1 asc, -1 desc
 
 async function loadFiles() {
@@ -801,7 +801,7 @@ function renderFiles() {
         <th class="sortable ${sortKey==='filename'?'sorted':''}" onclick="setSort('filename')">파일명 ${sortIc('filename')}</th>
         <th class="sortable ${sortKey==='class'?'sorted':''}" onclick="setSort('class')">종목 ${sortIc('class')}</th>
         <th>상태</th>
-        <th class="sortable cell-right ${sortKey==='collectedAt'?'sorted':''}" onclick="setSort('collectedAt')" style="text-align:right">수집일시 ${sortIc('collectedAt')}</th>
+        <th class="sortable cell-right ${sortKey==='createdAt'?'sorted':''}" onclick="setSort('createdAt')" style="text-align:right">수집일시 ${sortIc('createdAt')}</th>
         <th style="width:52px;text-align:center">통계</th>
       </tr></thead>
       <tbody>
@@ -813,7 +813,7 @@ function renderFiles() {
           <td class="cell-name"><div class="nm">${f.filename}</div><div class="id">${f.deviceId ?? '-'} · ${f.format}${f.phaseLabeled ? ' · phase' : ''}</div></td>
           <td><span class="pill class">${f.class}</span></td>
           <td>${statusPill(f)}</td>
-          <td class="cell-right"><div class="v">${fmtDate(f.collectedAt)}</div></td>
+          <td class="cell-right"><div class="v">${fmtDate(f.createdAt)}</div></td>
           <td style="text-align:center">
             <button class="stats-btn" title="센서 통계 보기" onclick="event.stopPropagation();openStats('${f.filename}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
@@ -1123,7 +1123,7 @@ function visibleVideos() {
     .filter(f => !st || f.status === st)
     .filter(f => !cl || f.class === cl)
     .filter(f => !q || f.filename.toLowerCase().includes(q))
-    .sort((a, b) => b.collectedAt.localeCompare(a.collectedAt));
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 function videoStatusPill(f) {
@@ -1161,7 +1161,7 @@ function renderVideos() {
           <td>${videoStatusPill(f)}</td>
           <td>${f.rows ?? '-'}</td>
           <td>${phaseMini(f)}</td>
-          <td class="cell-right"><div class="v">${fmtDate(f.collectedAt)}</div></td>
+          <td class="cell-right"><div class="v">${fmtDate(f.createdAt)}</div></td>
           <td style="text-align:center">
             <button class="stats-btn" title="영상 보기" onclick="event.stopPropagation();openVideo('${f.filename}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="6 4 20 12 6 20 6 4"/></svg>
