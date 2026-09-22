@@ -33,8 +33,8 @@ CREATE TABLE devices (
 	CONSTRAINT uq_device_platform_device UNIQUE (platform_id, device_id), 
 	FOREIGN KEY(platform_id) REFERENCES platforms (id)
 );
-CREATE INDEX ix_devices_platform_id ON devices (platform_id);
 CREATE INDEX ix_devices_device_id ON devices (device_id);
+CREATE INDEX ix_devices_platform_id ON devices (platform_id);
 
 CREATE TABLE phase_models (
 	class_name VARCHAR(64) NOT NULL, 
@@ -63,16 +63,16 @@ CREATE TABLE phase_models (
 	FOREIGN KEY(platform_id) REFERENCES platforms (id), 
 	FOREIGN KEY(exercise_fk) REFERENCES exercises (id)
 );
-CREATE INDEX ix_phase_models_platform_id ON phase_models (platform_id);
-CREATE INDEX ix_phase_models_status ON phase_models (status);
 CREATE INDEX ix_phase_models_class_name ON phase_models (class_name);
+CREATE INDEX ix_phase_models_platform_id ON phase_models (platform_id);
 CREATE INDEX ix_phase_models_exercise_fk ON phase_models (exercise_fk);
+CREATE INDEX ix_phase_models_status ON phase_models (status);
 
 CREATE TABLE dataset_files (
 	filename VARCHAR(128) NOT NULL, 
 	class_name VARCHAR(64) NOT NULL, 
 	bucket VARCHAR(64) NOT NULL, 
-	s3_key VARCHAR(256) NOT NULL, 
+	s3_key VARCHAR(255) NOT NULL, 
 	uploaded BOOL NOT NULL, 
 	phase_labeled BOOL NOT NULL, 
 	trained_in_version VARCHAR(32), 
@@ -88,10 +88,10 @@ CREATE TABLE dataset_files (
 	FOREIGN KEY(device_fk) REFERENCES devices (id), 
 	FOREIGN KEY(exercise_fk) REFERENCES exercises (id)
 );
-CREATE INDEX ix_dataset_files_device_fk ON dataset_files (device_fk);
-CREATE INDEX ix_dataset_files_exercise_fk ON dataset_files (exercise_fk);
-CREATE INDEX ix_dataset_files_class_name ON dataset_files (class_name);
 CREATE INDEX ix_dataset_files_platform_id ON dataset_files (platform_id);
+CREATE INDEX ix_dataset_files_exercise_fk ON dataset_files (exercise_fk);
+CREATE INDEX ix_dataset_files_device_fk ON dataset_files (device_fk);
+CREATE INDEX ix_dataset_files_class_name ON dataset_files (class_name);
 
 CREATE TABLE collect_files (
 	filename VARCHAR(128) NOT NULL, 
@@ -121,11 +121,11 @@ CREATE TABLE collect_files (
 	UNIQUE (dataset_file_id), 
 	FOREIGN KEY(dataset_file_id) REFERENCES dataset_files (id)
 );
+CREATE INDEX ix_collect_files_status ON collect_files (status);
 CREATE INDEX ix_collect_files_class_name ON collect_files (class_name);
 CREATE INDEX ix_collect_files_exercise_fk ON collect_files (exercise_fk);
-CREATE INDEX ix_collect_files_platform_id ON collect_files (platform_id);
 CREATE INDEX ix_collect_files_device_fk ON collect_files (device_fk);
-CREATE INDEX ix_collect_files_status ON collect_files (status);
+CREATE INDEX ix_collect_files_platform_id ON collect_files (platform_id);
 
 CREATE TABLE phase_model_files (
 	phase_model_id INTEGER NOT NULL, 
