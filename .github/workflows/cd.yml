@@ -9,7 +9,8 @@ on:
       - "app/**"
       - "mlflow/**"
       - "Dockerfile"
-      - "requirements/**"
+      - "pyproject.toml"
+      - "poetry.lock"
       - ".github/workflows/cd.yml"
   workflow_dispatch: {}
 

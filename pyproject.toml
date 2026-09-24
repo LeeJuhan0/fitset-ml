@@ -7,12 +7,62 @@ authors = [
 ]
 requires-python = ">=3.11,<3.14"
 dependencies = [
+    "fastapi (>=0.138.0,<1)",
+    "uvicorn[standard] (>=0.49.0,<1)",
+    "boto3 (>=1.43.36,<2)",
+    "mlflow (>=3.14.0,<4)",
+    "torch (==2.12.1)",
+    "numpy (>=2.4.6,<3)",
+    "pandas (>=2.3.3,<3)",
+    "pyarrow (>=24.0.0)",
+    "scipy (>=1.17.1,<2)",
+    "scikit-learn (>=1.9.0,<2)",
+    "pydantic-settings (>=2.14.2,<3)",
+    "sqlmodel (>=0.0.45,<0.1)",
+    "aiosqlite (>=0.22.1,<1)",
+    "aiomysql (>=0.2.0,<1)",
+    "python-multipart (>=0.0.32,<1)",
+    "httpx (>=0.28.1,<1)",
     "alembic (>=1.20.0,<2.0.0)",
-    "greenlet (>=3.5.6,<4.0.0)"
+    "greenlet (>=3.5.6,<4.0.0)",
 ]
 
 [tool.poetry]
 package-mode = false
+
+# CPU 전용 torch. EC2(t3.small)와 CI 에는 GPU 가 없어 CUDA 휠(수 GB)은 낭비라 Linux 만 이 인덱스에서 받는다.
+[[tool.poetry.source]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
+
+[tool.poetry.dependencies]
+torch = [
+    {version = "2.12.1", source = "pytorch-cpu", markers = "sys_platform == 'linux'"},
+    {version = "2.12.1", markers = "sys_platform != 'linux'"},
+]
+
+# 모델 변환(coremltools, onnx). 학습 워커가 돌리는 이미지에만 설치한다.
+[tool.poetry.group.convert]
+optional = true
+
+[tool.poetry.group.convert.dependencies]
+coremltools = ">=9.0,<10"
+onnx = ">=1.22.0,<2"
+
+# 구간 라벨링 워커(MediaPipe Pose). mediapipe 1.x 는 macOS 에서 크래시라 0.10 계열로 고정한다.
+[tool.poetry.group.vision]
+optional = true
+
+[tool.poetry.group.vision.dependencies]
+mediapipe = "<1"
+opencv-python-headless = ">=5.0.0.93"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=9.1.1"
+moto = {version = ">=5.2.2", extras = ["s3"]}
+onnx = ">=1.22.0,<2"
+onnxruntime = ">=1.28.0,<2"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

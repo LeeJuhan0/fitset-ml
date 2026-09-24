@@ -152,7 +152,6 @@ def export_and_upload(model, mean, std, window: int, platform: str, class_name: 
 
 def run(platform: str, class_name: str, model_id: int, version: str, filenames: list[str], window: int, stride: int, epochs: int, lr: float) -> None:
     """다운로드, 검증 분할 학습, 전체 재학습, 내보내기, 목록 갱신"""
-    db.run(db.init_db())
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     try:
         mlflow.set_tracking_uri(settings.mlflow_tracking_uri)

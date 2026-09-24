@@ -136,7 +136,6 @@ def move_to_labeled(platform: str, entry: CollectFileRead, result: dict) -> None
 
 def run(platform: str, filenames: list[str]) -> None:
     """파일별 독립 처리, 실패 시 failed 기록"""
-    db.run(db.init_db())
     for filename in filenames:
         entry = db.run(_with_session(get_file, platform, filename))
         if entry is None:

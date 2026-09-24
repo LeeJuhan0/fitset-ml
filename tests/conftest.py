@@ -1,4 +1,5 @@
 import pytest
+from sqlmodel import SQLModel
 from fastapi.testclient import TestClient
 
 from app.core import db
@@ -12,7 +13,12 @@ ADMIN_AUTH = ("admin", "admin-test-pw")
 def _test_database(tmp_path_factory):
     settings.database_url = f"sqlite+aiosqlite:///{tmp_path_factory.mktemp('db') / 'fitset_ml_test.db'}"
     db.reset()
-    db.run(db.init_db())
+
+    async def create_all():
+        async with db.get_engine().begin() as conn:
+            await conn.run_sync(SQLModel.metadata.create_all)
+
+    db.run(create_all())
     yield
     db.reset()
 

@@ -2,13 +2,13 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
-from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from .config import settings
 
-DSN = settings.database_url
+DSN = settings.database_url  # alembic env.py 용, 앱 엔진은 호출 시점 settings 를 읽는다
 
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker | None = None
@@ -24,7 +24,7 @@ def register_models() -> None:
 def create_engine(dsn: str | None = None) -> AsyncEngine:
     """비동기 엔진 생성, pool_pre_ping, echo 끔"""
     register_models()
-    return create_async_engine(dsn or DSN, echo=False, pool_pre_ping=True)
+    return create_async_engine(dsn or settings.database_url, echo=False, pool_pre_ping=True)
 
 
 def create_session(engine: AsyncEngine | None = None) -> async_sessionmaker:
@@ -69,10 +69,13 @@ async def session() -> AsyncIterator[AsyncSession]:
             raise
 
 
-async def init_db() -> None:
-    """엔티티 메타데이터 등록, create_all"""
-    async with get_engine().begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
+async def require_tables(*names: str) -> None:
+    """테이블 없으면 마이그레이션 안내 후 종료"""
+    async with get_engine().connect() as conn:
+        tables = await conn.run_sync(lambda c: set(inspect(c).get_table_names()))
+    missing = sorted(set(names) - tables)
+    if missing:
+        raise SystemExit(f"{', '.join(missing)} 테이블이 없습니다. scripts/migrate.py 를 먼저 실행하세요.")
 
 
 def run(coro):

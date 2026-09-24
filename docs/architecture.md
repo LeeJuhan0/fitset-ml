@@ -13,7 +13,7 @@ app/
 ├── core/                # ── 공유 인프라 (도메인·worker 공통) ──
 │   ├── config.py        #    설정(settings), PLATFORMS, CLASSES, PHASE_CLASSES
 │   ├── schemas.py       #    공통 응답 봉투(ApiResponse)·CamelModel(SQLModel 비테이블, camelCase) — 전 도메인 response_model의 기반
-│   ├── db.py            #    비동기 엔진(create_async_engine)·세션 팩토리(async_sessionmaker)·테이블 생성, 워커용 run()
+│   ├── db.py            #    비동기 엔진(create_async_engine)·세션 팩토리(async_sessionmaker)·마이그레이션 확인, 워커용 run()
 │   ├── exceptions.py    #    횡단 예외 (플랫폼 검증, 관리자 인증) — 각 예외가 status_code·detail 을 직접 정한다
 │   ├── exception_register.py  # 전역 예외 핸들러 3종, 실패 봉투 조립
 │   ├── logging.py       #    traceId 로깅 필터 + trace 미들웨어·액세스 로그

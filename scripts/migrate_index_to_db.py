@@ -49,13 +49,13 @@ async def migrate_dataset(s, platform: str) -> int:
 
 
 def main():
-    """플랫폼별 이관 실행, 결과 출력"""
+    """마이그레이션된 DB 에 플랫폼별 이관, 결과 출력"""
     ap = argparse.ArgumentParser()
     ap.add_argument("--platform", choices=sorted(PLATFORMS), help="없으면 전체 플랫폼")
     args = ap.parse_args()
     async def go():
-        """테이블 생성 후 플랫폼별 이관"""
-        await db.init_db()
+        """마이그레이션 확인 후 플랫폼별 이관"""
+        await db.require_tables("dataset_files")
         for platform in ([args.platform] if args.platform else sorted(PLATFORMS)):
             async with db.session() as s:
                 print(f"{platform}: dataset_files +{await migrate_dataset(s, platform)}")

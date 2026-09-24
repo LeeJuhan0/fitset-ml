@@ -159,15 +159,21 @@ mlflow 환경변수는 `BACKEND_STORE_URI`, `ARTIFACT_ROOT`, `ALLOWED_HOSTS`, `C
 
 ## 로컬 실행
 
+의존성은 Poetry(`pyproject.toml`, `poetry.lock`)로 관리합니다. 가상환경은 프로젝트 안 `.venv` 입니다(`poetry.toml`).
+
 ```bash
-uvicorn app.main:app --reload
+poetry install --with convert,vision        # 앱 + 모델 변환 + 구간 라벨링 워커, 테스트까지 (dev 그룹은 기본 포함)
+PYTHONPATH=. .venv/bin/python scripts/migrate.py   # DB 마이그레이션
+.venv/bin/uvicorn app.main:app --reload
 docker compose up --build   # mlflow와 admin-api를 한 번에
 ```
 
 ## 테스트
 
 ```bash
-pytest
+poetry run pytest -m "not e2e"
 ```
+
+의존성 추가는 `poetry add <패키지>`, 그룹은 `--group dev|convert|vision`. Linux(Docker, CI)의 torch 는 CPU 전용 인덱스(`pytorch-cpu`)에서 받습니다.
 
 `tests/`에 API·S3 헬퍼·플랫폼 검증 테스트가 있습니다.
