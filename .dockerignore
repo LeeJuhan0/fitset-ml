@@ -3,8 +3,6 @@
 __pycache__
 *.pyc
 *.pyo
-mlruns/
-terraform/
 .env
 *.log
 .DS_Store

@@ -4,9 +4,6 @@ __pycache__/
 .venv/
 mlruns/
 *.log
-terraform/.terraform/
-terraform/terraform.tfstate
-terraform/terraform.tfstate.backup
 .pytest_cache/
 .DS_Store
 
@@ -17,3 +14,6 @@ mlflow/mlflow.db
 # 로컬 파일 목록(sqlite)·포즈 모델
 fitset_ml.db
 models/
+
+# 문서 폴더 (로컬 전용)
+docs/

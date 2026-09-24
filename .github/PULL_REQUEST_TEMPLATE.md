@@ -44,16 +44,16 @@ fitset-ml-server PR 템플릿
 - **관련 ADR / 이슈 / 문서**:
 
 
-## 레이어별 변경 (api / core / worker)
-<!-- 변경된 레이어만 채우기. 데이터 스키마(index.json 등) 변경은 반드시 명시. -->
+## 도메인별 변경
+<!-- 변경된 도메인 패키지만 채우고, 레이어(router, schemas, service, repository, utils, models, exceptions)를 함께 적기 -->
 
-- **`app/api/`** (라우팅·요청 검증·응답 직렬화):
-- **`app/core/`** (설정·S3 등 인프라/외부자원):
-- **`app/worker/`** (학습·전처리·변환 등 도메인 로직):
-- **기타** (terraform / docker / static / tests / ci):
+- **`app/<도메인>/`** (data, phase, training, deployment, exercises) [레이어]:
+- **`app/core/`** (설정, DB, S3, 보안, 공통 예외):
+- **`app/worker/`** (학습, 전처리, 변환, 구간 라벨링):
+- **기타** (alembic / docker / static / tests / ci):
 
 ### 데이터·스키마 영향
-<!-- index.json/모델 메타 등 저장 포맷이 바뀌면 하위호환·마이그레이션 여부 명시 -->
+<!-- DB 테이블, 모델 메타 등 저장 포맷이 바뀌면 alembic 리비전과 하위호환 여부 명시 -->
 - 스키마 변경 여부: 있음 / 없음
 - 하위호환 / 마이그레이션:
 
