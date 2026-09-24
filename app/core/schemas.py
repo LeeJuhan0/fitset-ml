@@ -40,6 +40,6 @@ class ErrorResponse(CamelModel):
     error: ErrorBody
 
 
-class FilenameQuery(CamelModel):
+class FilenameRequest(CamelModel):
     """?filename= 쿼리"""
     filename: str

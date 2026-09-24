@@ -4,15 +4,18 @@ import urllib.request
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.exercises.schemas import (
+    ListExercisesResponse,
+    SeedResponse,
+)
 from app.core import s3
 from app.core.config import settings
-from app.exercises.schemas import ListExercisesData, SeedData, SeedQuery
 from app.exercises.repository import list_exercises, upsert_exercises
 
 
-async def exercises(s: AsyncSession) -> ListExercisesData:
+async def exercises(s: AsyncSession) -> ListExercisesResponse:
     """마스터 목록"""
-    return ListExercisesData.model_validate({"exercises": await list_exercises(s)})
+    return ListExercisesResponse(exercises=await list_exercises(s))
 
 
 def load_mapping(source: str | None = None) -> dict:
@@ -25,9 +28,8 @@ def load_mapping(source: str | None = None) -> dict:
         return json.load(resp)
 
 
-async def seed(s: AsyncSession, query: SeedQuery) -> SeedData:
+async def seed(s: AsyncSession, source: str | None) -> SeedResponse:
     """매핑 JSON → exercises upsert"""
-    source = query.source
     mapping = await asyncio.to_thread(load_mapping, source)
     result = await upsert_exercises(s, mapping["classes"])
-    return SeedData.model_validate({"source": source or settings.class_mapping_url, "modelClassCount": mapping.get("modelClassCount"), **result})
+    return SeedResponse(source=source or settings.class_mapping_url, model_class_count=mapping.get("modelClassCount"), **result)

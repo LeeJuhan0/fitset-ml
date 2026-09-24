@@ -16,9 +16,9 @@ def get_latest(platform: str) -> dict | None:
         return cached[1]
 
     try:
-        obj = s3._client().get_object(
+        obj = s3.client().get_object(
             Bucket=s3.settings.models_bucket,
-            Key=s3._latest_key(platform),
+            Key=s3.latest_key(platform),
         )
         data = json.loads(obj["Body"].read())
         if not data.get("version"):
@@ -34,9 +34,9 @@ def get_latest(platform: str) -> dict | None:
 
 def put_latest(platform: str, data: dict):
     """latest.json 저장, 캐시 write-through"""
-    s3._client().put_object(
+    s3.client().put_object(
         Bucket=s3.settings.models_bucket,
-        Key=s3._latest_key(platform),
+        Key=s3.latest_key(platform),
         Body=json.dumps(data, ensure_ascii=False, indent=2),
         ContentType="application/json",
     )
@@ -46,7 +46,7 @@ def put_latest(platform: str, data: dict):
 def generate_presigned_model_download_url(model_url: str, expires: int = 3600) -> str:
     """s3 경로 → GET 서명 URL"""
     bucket, key = model_url.removeprefix("s3://").split("/", 1)
-    return s3._client().generate_presigned_url(
+    return s3.client().generate_presigned_url(
         "get_object",
         Params={"Bucket": bucket, "Key": key},
         ExpiresIn=expires,

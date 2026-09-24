@@ -10,7 +10,7 @@ class UploadConfirmRequest(CamelModel):
     class_name: str
 
 
-class ListDataData(CamelModel):
+class ListDataResponse(CamelModel):
     """data 응답, 목록 목록"""
     platform: str
     files: list[DatasetFileRead]
@@ -25,7 +25,7 @@ class ChannelStats(CamelModel):
     std: float
 
 
-class FileStatsData(CamelModel):
+class FileStatsResponse(CamelModel):
     """stats 응답, 트림 정보와 채널 통계"""
     filename: str
     class_name: str = Field(alias="class")
@@ -37,7 +37,7 @@ class FileStatsData(CamelModel):
     channels: list[ChannelStats]
 
 
-class PresignedUrlData(CamelModel):
+class PresignedUrlResponse(CamelModel):
     """presigned-url 응답, PUT URL 파일명"""
     presigned_url: str
     expires_in: int
@@ -45,13 +45,13 @@ class PresignedUrlData(CamelModel):
     filename: str
 
 
-class UploadConfirmData(CamelModel):
+class UploadConfirmResponse(CamelModel):
     """upload-confirm 응답, filename class"""
     filename: str
     class_name: str = Field(alias="class")
 
 
-class PresignedUrlQuery(CamelModel):
+class PresignedUrlRequest(CamelModel):
     """?class=&deviceId= 쿼리, 채번 주인과 종목"""
     class_name: str
     device_id: str

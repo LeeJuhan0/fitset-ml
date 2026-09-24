@@ -34,7 +34,7 @@ async def reserve_admin_upload(s: AsyncSession, platform: str, class_name: str, 
             for r in (await s.exec(select(DatasetFile).where(DatasetFile.platform_id == p.id))).all()
         ]
         filename = utils.next_filename(entries, class_name, device_id, owner_field="deviceId")
-        key = s3._csv_key(platform, await folder_for(s, class_name), filename)
+        key = s3.csv_key(platform, await folder_for(s, class_name), filename)
         s.add(DatasetFile(
             platform=p,
             device=device,

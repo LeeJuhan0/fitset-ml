@@ -10,7 +10,7 @@ class TrainRequest(CamelModel):
     lr: float = 0.001
 
 
-class TrainStartData(CamelModel):
+class TrainStartResponse(CamelModel):
     """train 응답, jobId version totalEpochs"""
     job_id: str
     experiment_id: str
@@ -18,7 +18,7 @@ class TrainStartData(CamelModel):
     total_epochs: int
 
 
-class TrainStatusData(CamelModel):
+class TrainStatusResponse(CamelModel):
     """status 응답, 에폭 진행과 손실"""
     status: str
     experiment_id: str
@@ -65,7 +65,7 @@ class RunItem(CamelModel):
         return round((self.end_time - self.start_time) / 1000)
 
 
-class RunsData(CamelModel):
+class RunsResponse(CamelModel):
     """runs 응답, 목록과 best run"""
     runs: list[RunItem]
     best_run_id: str | None = None
@@ -77,17 +77,17 @@ class MetricPoint(CamelModel):
     value: float
 
 
-class MetricHistoryData(CamelModel):
+class MetricHistoryResponse(CamelModel):
     """history 응답, 메트릭 시계열"""
     metric: str
     history: list[MetricPoint]
 
 
-class JobIdQuery(CamelModel):
+class JobIdRequest(CamelModel):
     """?jobId= 쿼리, start_training 이 준 run_id"""
     job_id: str
 
 
-class MetricQuery(CamelModel):
+class MetricRequest(CamelModel):
     """?metric= 쿼리, 기본 val_loss"""
     metric: str = "val_loss"

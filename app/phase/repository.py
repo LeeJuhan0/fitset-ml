@@ -56,9 +56,9 @@ async def reserve_collect(s: AsyncSession, platform: str, class_name: str, devic
             filename=filename,
             class_name=class_name,
             csv_bucket=s3.settings.collect_imu_bucket,
-            csv_key=s3._collect_key(platform, folder, filename),
+            csv_key=s3.collect_key(platform, folder, filename),
             video_bucket=s3.settings.collect_video_bucket,
-            video_key=s3._collect_key(platform, folder, utils.video_name(filename)),
+            video_key=s3.collect_key(platform, folder, utils.video_name(filename)),
             uploaded=False,
             status=utils.STATUS_PENDING,
         ))

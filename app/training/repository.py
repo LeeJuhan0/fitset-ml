@@ -19,7 +19,7 @@ async def uploaded_filenames(s: AsyncSession, platform: str) -> set[str]:
 
 def list_model_versions(platform: str) -> list[str]:
     """models 버킷의 v버전 폴더 목록"""
-    paginator = s3._client().get_paginator("list_objects_v2")
+    paginator = s3.client().get_paginator("list_objects_v2")
     pages = paginator.paginate(
         Bucket=s3.settings.models_bucket,
         Prefix=f"{platform}/",

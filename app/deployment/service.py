@@ -2,7 +2,12 @@ import time
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 
-from app.deployment.schemas import DeployData, DeployRequest, ModelLatestData, VersionStatsData
+from app.deployment.schemas import (
+    DeployResponse,
+    ModelLatestResponse,
+    VersionStatItem,
+    VersionStatsResponse,
+)
 from app.deployment.exceptions import NoDeployedModelError, NoTrainingHistoryError, VersionNotFoundError
 
 from app.core.config import settings
@@ -24,9 +29,8 @@ def _prune(platform: str):
         q.popleft()
 
 
-def deploy(platform: str, payload: DeployRequest) -> DeployData:
+def deploy(platform: str, version: str) -> DeployResponse:
     """지정 버전 latest.json 기록, 롤백 겸용"""
-    version = payload.version
     import mlflow
 
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
@@ -52,14 +56,14 @@ def deploy(platform: str, payload: DeployRequest) -> DeployData:
         "mlflowRunId": run.info.run_id,
     })
 
-    return DeployData.model_validate({
-        "deployedVersion": version,
-        "platform": platform,
-        "deployedAt": deployed_at,
-    })
+    return DeployResponse(
+        deployed_version=version,
+        platform=platform,
+        deployed_at=deployed_at,
+    )
 
 
-def latest(platform: str, current_version: str | None) -> ModelLatestData:
+def latest(platform: str, current_version: str | None) -> ModelLatestResponse:
     """최신 버전·서명 URL 반환, 버전 리포팅 기록"""
     latest_info = get_latest(platform)
     if not latest_info:
@@ -70,15 +74,15 @@ def latest(platform: str, current_version: str | None) -> ModelLatestData:
         _prune(platform)
 
     latest_version = latest_info["version"]
-    return ModelLatestData.model_validate({
-        "latestVersion": latest_version,
-        "modelUrl": generate_presigned_model_download_url(latest_info["modelUrl"]),
-        "metaUrl": settings.class_mapping_url,
-        "isUpToDate": current_version == latest_version,
-    })
+    return ModelLatestResponse(
+        latest_version=latest_version,
+        model_url=generate_presigned_model_download_url(latest_info["modelUrl"]),
+        meta_url=settings.class_mapping_url,
+        is_up_to_date=current_version == latest_version,
+    )
 
 
-def version_stats(platform: str) -> VersionStatsData:
+def version_stats(platform: str) -> VersionStatsResponse:
     """최근 24시간 윈도우의 버전 분포 집계 유스케이스"""
     latest_info = get_latest(platform)
     latest_version = latest_info["version"] if latest_info else None
@@ -87,11 +91,11 @@ def version_stats(platform: str) -> VersionStatsData:
     counts = utils.aggregate_reports(_reports[platform], time.time())
     total = sum(counts.values()) or 1
 
-    return VersionStatsData.model_validate({
-        "latestVersion": latest_version,
-        "totalReports": sum(counts.values()),
-        "stats": [
-            {"version": v, "count": c, "ratio": round(c / total, 2)}
+    return VersionStatsResponse(
+        latest_version=latest_version,
+        total_reports=sum(counts.values()),
+        stats=[
+            VersionStatItem(version=v, count=c, ratio=round(c / total, 2))
             for v, c in counts.most_common()
         ],
-    })
+    )

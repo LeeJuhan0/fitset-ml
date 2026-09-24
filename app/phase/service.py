@@ -8,29 +8,22 @@ import tempfile
 from botocore.exceptions import BotoCoreError, ClientError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.phase.schemas import (
+    LabelResponse,
+    ListFilesResponse,
+    ListModelsResponse,
+    ModelUrlResponse,
+    PhaseTrainResponse,
+    PoseResponse,
+    PresignedPairResponse,
+    PromoteResponse,
+    SkippedFile,
+    UploadConfirmResponse,
+    VideoUrlResponse,
+)
 from app.core import s3
 from app.core.config import settings
 from app.phase import utils
-from app.core.schemas import FilenameQuery
-from app.data.schemas import PresignedUrlQuery
-from app.phase.schemas import (
-    LabelData,
-    LabelRequest,
-    ModelFormatQuery,
-    ModelsQuery,
-    PhaseTrainRequest,
-    PromoteRequest,
-    UploadConfirmRequest,
-    ListFilesData,
-    ListModelsData,
-    ModelUrlData,
-    PhaseTrainData,
-    PoseData,
-    PresignedPairData,
-    PromoteData,
-    UploadConfirmData,
-    VideoUrlData,
-)
 from app.phase.exceptions import (
     CollectFileNotFoundError,
     EmptyFilenamesError,
@@ -68,44 +61,41 @@ PUT_EXPIRES_SECONDS = 600
 GET_EXPIRES_SECONDS = 3600
 
 
-async def issue_upload_urls(s: AsyncSession, platform: str, query: PresignedUrlQuery) -> PresignedPairData:
+async def issue_upload_urls(s: AsyncSession, platform: str, class_name: str, device_id: str) -> PresignedPairResponse:
     """업로드 1단계, 검증 채번 presigned PUT 쌍"""
-    class_name, device_id = query.class_name, query.device_id
     if not await is_class_known(s, class_name):
         raise UnsupportedClassError(class_name)
     if not utils.is_valid_device_id(device_id):
         raise InvalidDeviceIdError()
     filename = await reserve_collect(s, platform, class_name, device_id)
     entry = await get_file(s, platform, filename)
-    return PresignedPairData.model_validate({
-        "filename": filename,
-        "csvUrl": presigned_put_url(entry.csv_bucket, entry.csv_key, CONTENT_TYPES["csv"], PUT_EXPIRES_SECONDS),
-        "csvKey": entry.csv_key,
-        "videoUrl": presigned_put_url(entry.video_bucket, entry.video_key, CONTENT_TYPES["video"], PUT_EXPIRES_SECONDS),
-        "videoKey": entry.video_key,
-        "expiresIn": PUT_EXPIRES_SECONDS,
-    })
+    return PresignedPairResponse(
+        filename=filename,
+        csv_url=presigned_put_url(entry.csv_bucket, entry.csv_key, CONTENT_TYPES["csv"], PUT_EXPIRES_SECONDS),
+        csv_key=entry.csv_key,
+        video_url=presigned_put_url(entry.video_bucket, entry.video_key, CONTENT_TYPES["video"], PUT_EXPIRES_SECONDS),
+        video_key=entry.video_key,
+        expires_in=PUT_EXPIRES_SECONDS,
+    )
 
 
-async def confirm_upload(s: AsyncSession, platform: str, payload: UploadConfirmRequest) -> UploadConfirmData:
+async def confirm_upload(s: AsyncSession, platform: str, filename: str, video_start: float, rows: int | None) -> UploadConfirmResponse:
     """업로드 2단계, videoStart 검증, 예약 없으면 404"""
-    filename, video_start, rows = payload.filename, payload.video_start, payload.rows
     if not utils.is_valid_video_start(video_start):
         raise InvalidVideoStartError()
     if not await confirm_collect(s, platform, filename, video_start, rows):
         raise ReservationNotFoundError()
-    return UploadConfirmData.model_validate({"filename": filename, "status": utils.STATUS_PENDING})
+    return UploadConfirmResponse(filename=filename, status=utils.STATUS_PENDING)
 
 
-async def files(s: AsyncSession, platform: str) -> ListFilesData:
+async def files(s: AsyncSession, platform: str) -> ListFilesResponse:
     """목록 전체 조회, 상태별 개수"""
     entries = await list_files(s, platform)
-    return ListFilesData.model_validate({"platform": platform, "files": entries, "counts": utils.status_counts(entries)})
+    return ListFilesResponse(platform=platform, files=entries, counts=utils.status_counts(entries))
 
 
-async def start_labeling(s: AsyncSession, platform: str, payload: LabelRequest) -> LabelData:
+async def start_labeling(s: AsyncSession, platform: str, filenames: list[str]) -> LabelResponse:
     """라벨링 가능 파일 선별, labeling 표시, 워커 spawn"""
-    filenames = payload.filenames
     if not filenames:
         raise EmptyFilenamesError()
     entries = {f.filename: f for f in await list_files(s, platform)}
@@ -113,16 +103,16 @@ async def start_labeling(s: AsyncSession, platform: str, payload: LabelRequest) 
     for name in filenames:
         reason = utils.label_block_reason(entries.get(name))
         if reason is not None:
-            skipped.append({"filename": name, "reason": reason})
+            skipped.append(SkippedFile(filename=name, reason=reason))
             continue
         accepted.append(name)
     if not accepted:
-        return LabelData.model_validate({"accepted": [], "skipped": skipped})
+        return LabelResponse(accepted=[], skipped=skipped)
 
     await mark_labeling(s, platform, accepted)
     await s.commit()
     spawn_worker(platform, accepted)
-    return LabelData.model_validate({"accepted": accepted, "skipped": skipped})
+    return LabelResponse(accepted=accepted, skipped=skipped)
 
 
 def spawn_worker(platform: str, filenames: list[str]) -> None:
@@ -143,24 +133,22 @@ def _video_location(entry: CollectFileRead) -> tuple[str, str]:
     return entry.video_bucket, entry.video_key
 
 
-async def video_url(s: AsyncSession, platform: str, query: FilenameQuery) -> VideoUrlData:
+async def video_url(s: AsyncSession, platform: str, filename: str) -> VideoUrlResponse:
     """영상 재생 presigned GET, 목록에 없으면 404"""
-    filename = query.filename
     entry = await get_file(s, platform, filename)
     if entry is None:
         raise CollectFileNotFoundError(filename)
     bucket, key = _video_location(entry)
-    return VideoUrlData.model_validate({"filename": filename, "url": presigned_get_url(bucket, key, GET_EXPIRES_SECONDS), "expiresIn": GET_EXPIRES_SECONDS})
+    return VideoUrlResponse(filename=filename, url=presigned_get_url(bucket, key, GET_EXPIRES_SECONDS), expires_in=GET_EXPIRES_SECONDS)
 
 
-async def pose(s: AsyncSession, platform: str, query: FilenameQuery) -> PoseData:
+async def pose(s: AsyncSession, platform: str, filename: str) -> PoseResponse:
     """관절 phase JSON 조회, 라벨 전 404"""
-    filename = query.filename
     entry = await get_file(s, platform, filename)
     if entry is None or entry.label is None:
         raise PoseNotReadyError(filename)
     data = await asyncio.to_thread(read_pose, entry.label.data_bucket, entry.label.pose_key)
-    return PoseData.model_validate({"filename": filename, "fps": data["fps"], "frames": data["frames"]})
+    return PoseResponse(filename=filename, fps=data["fps"], frames=data["frames"])
 
 
 def _copy_to_dataset(entry: CollectFileRead, key: str) -> str:
@@ -181,9 +169,8 @@ def _copy_to_dataset(entry: CollectFileRead, key: str) -> str:
     return key
 
 
-async def promote(s: AsyncSession, platform: str, payload: PromoteRequest) -> PromoteData:
+async def promote(s: AsyncSession, platform: str, filenames: list[str]) -> PromoteResponse:
     """승격, DB 행 선점 후 S3 복사, 재실행 시 이어서 완료"""
-    filenames = payload.filenames
     if not filenames:
         raise EmptyFilenamesError()
     entries = {f.filename: f for f in await list_files(s, platform)}
@@ -192,9 +179,9 @@ async def promote(s: AsyncSession, platform: str, payload: PromoteRequest) -> Pr
         entry = entries.get(name)
         reason = utils.promote_block_reason(entry)
         if reason is not None:
-            skipped.append({"filename": name, "reason": reason})
+            skipped.append(SkippedFile(filename=name, reason=reason))
             continue
-        key = s3._csv_key(platform, await folder_for(s, entry.class_name), utils.dataset_filename(name))
+        key = s3.csv_key(platform, await folder_for(s, entry.class_name), utils.dataset_filename(name))
         dataset = await reserve_promotion(s,
             platform, name, dataset_filename=utils.dataset_filename(name),
             bucket=settings.raw_data_bucket, key=key, phase_labeled=bool(entry.label and entry.label.has_phase),
@@ -203,18 +190,16 @@ async def promote(s: AsyncSession, platform: str, payload: PromoteRequest) -> Pr
         try:
             await asyncio.to_thread(_copy_to_dataset, entry, dataset.s3_key)
         except (BotoCoreError, ClientError, OSError):
-            skipped.append({"filename": name, "reason": "S3 복사 실패, 다시 승격하면 이어서 진행"})
+            skipped.append(SkippedFile(filename=name, reason="S3 복사 실패, 다시 승격하면 이어서 진행"))
             continue
         await complete_promotion(s, platform, name)
         await s.commit()
         promoted.append(name)
-    return PromoteData.model_validate({"promoted": promoted, "skipped": skipped})
+    return PromoteResponse(promoted=promoted, skipped=skipped)
 
 
-async def start_phase_training(s: AsyncSession, platform: str, payload: PhaseTrainRequest) -> PhaseTrainData:
+async def start_phase_training(s: AsyncSession, platform: str, class_name: str, filenames: list[str] | None, *, epochs: int, lr: float, window: int, stride: int) -> PhaseTrainResponse:
     """종목 검증, 파일 확정, 버전 채번, 워커 spawn"""
-    class_name, filenames = payload.class_name, payload.filenames
-    epochs, lr, window, stride = payload.epochs, payload.lr, payload.window, payload.stride
     if await phase_rule(s, class_name) is None:
         raise UnsupportedPhaseClassError(class_name)
     candidates = {f.filename for f in await phase_labeled_files(s, platform, class_name)}
@@ -228,7 +213,7 @@ async def start_phase_training(s: AsyncSession, platform: str, payload: PhaseTra
     model = await create_phase_model(s, platform, class_name, version, chosen, window=window, stride=stride, epochs=epochs, lr=lr)
     await s.commit()
     spawn_trainer(platform, class_name, model.id, version, chosen, window=window, stride=stride, epochs=epochs, lr=lr)
-    return PhaseTrainData.model_validate({"modelId": model.id, "version": version, "class": class_name, "numFiles": len(chosen)})
+    return PhaseTrainResponse(model_id=model.id, version=version, class_name=class_name, num_files=len(chosen))
 
 
 def spawn_trainer(platform: str, class_name: str, model_id: int, version: str, filenames: list[str], *,
@@ -245,14 +230,13 @@ def spawn_trainer(platform: str, class_name: str, model_id: int, version: str, f
     )
 
 
-async def models(s: AsyncSession, platform: str, query: ModelsQuery) -> ListModelsData:
+async def models(s: AsyncSession, platform: str, class_name: str | None) -> ListModelsResponse:
     """모델 목록"""
-    return ListModelsData.model_validate({"platform": platform, "models": await list_phase_models(s, platform, query.class_name)})
+    return ListModelsResponse(platform=platform, models=await list_phase_models(s, platform, class_name))
 
 
-async def model_download_url(s: AsyncSession, platform: str, model_id: int, query: ModelFormatQuery) -> ModelUrlData:
+async def model_download_url(s: AsyncSession, platform: str, model_id: int, fmt: str) -> ModelUrlResponse:
     """산출물 presigned GET, 포맷 검증, 미완성이면 404"""
-    fmt = query.format
     if not utils.is_valid_model_format(fmt):
         raise InvalidModelFormatError()
     model = await get_phase_model(s, platform, model_id)
@@ -261,4 +245,4 @@ async def model_download_url(s: AsyncSession, platform: str, model_id: int, quer
     key = {"pt": model.pt_key, "onnx": model.onnx_key, "mlpackage": model.mlpackage_key}[fmt]
     if key is None:
         raise ModelArtifactNotFoundError()
-    return ModelUrlData.model_validate({"modelId": model_id, "format": fmt, "url": presigned_get_url(model.bucket, key, GET_EXPIRES_SECONDS), "expiresIn": GET_EXPIRES_SECONDS})
+    return ModelUrlResponse(model_id=model_id, format=fmt, url=presigned_get_url(model.bucket, key, GET_EXPIRES_SECONDS), expires_in=GET_EXPIRES_SECONDS)

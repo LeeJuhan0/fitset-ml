@@ -1,7 +1,7 @@
 import argparse
 
 from app.core import db
-from app.exercises.schemas import SeedQuery
+from app.exercises.schemas import SeedRequest
 from app.exercises.service import seed
 
 
@@ -14,7 +14,7 @@ def main():
         """테이블 생성 후 시드 실행"""
         await db.init_db()
         async with db.session() as s:
-            return await seed(s, SeedQuery(source=args.source))
+            return await seed(s, SeedRequest(source=args.source))
 
     print(db.run(go()))
 

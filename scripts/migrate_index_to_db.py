@@ -39,7 +39,7 @@ async def migrate_dataset(s, platform: str) -> int:
             filename=f["filename"],
             class_name=f["class"],
             bucket=settings.raw_data_bucket,
-            s3_key=s3._csv_key(platform, f["class"], f["filename"]),
+            s3_key=s3.csv_key(platform, f["class"], f["filename"]),
             uploaded=bool(f.get("uploaded", True)),
             trained_in_version=f.get("trainedInVersion"),
             created_at=parse_iso(f.get("collectedAt")),

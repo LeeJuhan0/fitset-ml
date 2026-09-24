@@ -8,7 +8,7 @@ from app.phase.models import CollectFileRead, PhaseModelRead
 from app.core.schemas import CamelModel
 
 
-class PresignedPairData(CamelModel):
+class PresignedPairResponse(CamelModel):
     """presigned-url 응답, CSV 영상 PUT URL 2개"""
     filename: str
     csv_url: str
@@ -25,13 +25,13 @@ class UploadConfirmRequest(CamelModel):
     rows: int | None = None
 
 
-class UploadConfirmData(CamelModel):
+class UploadConfirmResponse(CamelModel):
     """upload-confirm 응답, filename, status"""
     filename: str
     status: str
 
 
-class ListFilesData(CamelModel):
+class ListFilesResponse(CamelModel):
     """files 응답, 목록 전체, 상태별 개수"""
     platform: str
     files: list[CollectFileRead]
@@ -58,20 +58,20 @@ class SkippedFile(CamelModel):
     reason: str
 
 
-class LabelData(CamelModel):
+class LabelResponse(CamelModel):
     """label 응답, accepted, skipped"""
     accepted: list[str]
     skipped: list[SkippedFile]
 
 
-class VideoUrlData(CamelModel):
+class VideoUrlResponse(CamelModel):
     """video-url 응답, presigned GET, 만료 초"""
     filename: str
     url: str
     expires_in: int
 
 
-class PoseData(CamelModel):
+class PoseResponse(CamelModel):
     """pose 응답, fps, 프레임별 phase, 관절 33개"""
     filename: str
     fps: float
@@ -92,7 +92,7 @@ class PromoteRequest(CamelModel):
         return data
 
 
-class PromoteData(CamelModel):
+class PromoteResponse(CamelModel):
     """promote 응답, promoted, skipped"""
     promoted: list[str]
     skipped: list[SkippedFile]
@@ -117,7 +117,7 @@ class PhaseTrainRequest(CamelModel):
         return data
 
 
-class PhaseTrainData(CamelModel):
+class PhaseTrainResponse(CamelModel):
     """train 응답, modelId, version, class, numFiles"""
     model_id: int
     version: str
@@ -125,13 +125,13 @@ class PhaseTrainData(CamelModel):
     num_files: int
 
 
-class ListModelsData(CamelModel):
+class ListModelsResponse(CamelModel):
     """models 응답, 종목별 렙카운팅 모델 목록"""
     platform: str
     models: list[PhaseModelRead]
 
 
-class ModelUrlData(CamelModel):
+class ModelUrlResponse(CamelModel):
     """download-url 응답, presigned GET"""
     model_id: int
     format: str
@@ -139,11 +139,11 @@ class ModelUrlData(CamelModel):
     expires_in: int
 
 
-class ModelsQuery(CamelModel):
+class ModelsRequest(CamelModel):
     """?class= 쿼리, 없으면 전체 종목"""
     class_name: str | None = None
 
 
-class ModelFormatQuery(CamelModel):
+class ModelFormatRequest(CamelModel):
     """?format= 쿼리, pt onnx mlpackage"""
     format: str

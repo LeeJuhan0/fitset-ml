@@ -18,10 +18,10 @@ class _Body:
 
 
 def test_key_builders():
-    assert s3._csv_key("android", "SQUAT", "a.csv") == "android/raw/SQUAT/a.csv"
-    assert s3._model_key("ios", "v1.3", "FitSet.mlpackage") == "ios/v1.3/FitSet.mlpackage"
-    assert s3._latest_key("android") == "android/latest.json"
-    assert s3._collect_key("ios", "001_PUSHUP", "PUSHUP_DEV_0001.mov") == "ios/001_PUSHUP/PUSHUP_DEV_0001.mov"
+    assert s3.csv_key("android", "SQUAT", "a.csv") == "android/raw/SQUAT/a.csv"
+    assert s3.model_key("ios", "v1.3", "FitSet.mlpackage") == "ios/v1.3/FitSet.mlpackage"
+    assert s3.latest_key("android") == "android/latest.json"
+    assert s3.collect_key("ios", "001_PUSHUP", "PUSHUP_DEV_0001.mov") == "ios/001_PUSHUP/PUSHUP_DEV_0001.mov"
 
 
 @pytest.fixture(autouse=True)
@@ -49,7 +49,7 @@ class _CountingLatestClient:
 
 def test_get_latest_caches_within_ttl(monkeypatch):
     fake = _CountingLatestClient({"version": "v1.0", "modelUrl": "s3://m/x"})
-    monkeypatch.setattr(s3, "_client", lambda: fake)
+    monkeypatch.setattr(s3, "client", lambda: fake)
 
     assert dep_repo.get_latest("ios")["version"] == "v1.0"
     assert dep_repo.get_latest("ios")["version"] == "v1.0"
@@ -58,7 +58,7 @@ def test_get_latest_caches_within_ttl(monkeypatch):
 
 def test_get_latest_refetches_after_ttl(monkeypatch):
     fake = _CountingLatestClient({"version": "v1.0", "modelUrl": "s3://m/x"})
-    monkeypatch.setattr(s3, "_client", lambda: fake)
+    monkeypatch.setattr(s3, "client", lambda: fake)
 
     dep_repo.get_latest("ios")
     ts, data = dep_repo._latest_cache["ios"]
@@ -70,7 +70,7 @@ def test_get_latest_refetches_after_ttl(monkeypatch):
 
 def test_put_latest_write_through(monkeypatch):
     fake = _CountingLatestClient({"version": "v1.0", "modelUrl": "s3://m/x"})
-    monkeypatch.setattr(s3, "_client", lambda: fake)
+    monkeypatch.setattr(s3, "client", lambda: fake)
 
     dep_repo.put_latest("ios", {"version": "v2.0", "modelUrl": "s3://m/y"})
     assert fake.put_calls == 1
@@ -80,7 +80,7 @@ def test_put_latest_write_through(monkeypatch):
 
 def test_get_latest_caches_none_and_platforms_isolated(monkeypatch):
     fake = _CountingLatestClient({"version": None})
-    monkeypatch.setattr(s3, "_client", lambda: fake)
+    monkeypatch.setattr(s3, "client", lambda: fake)
 
     assert dep_repo.get_latest("ios") is None
     assert dep_repo.get_latest("ios") is None
@@ -98,7 +98,7 @@ def test_generate_presigned_model_download_url_parses_s3_url(monkeypatch):
             captured.update(op=op, params=Params, expires=ExpiresIn)
             return "https://signed.example/x"
 
-    monkeypatch.setattr(s3, "_client", lambda: _FakeClient())
+    monkeypatch.setattr(s3, "client", lambda: _FakeClient())
     url = dep_repo.generate_presigned_model_download_url("s3://fitset-models/ios/v1.3/FitSet.mlpackage.zip")
 
     assert url == "https://signed.example/x"
@@ -142,5 +142,5 @@ def test_list_model_versions_filters_non_version_prefixes(monkeypatch):
         def get_paginator(self, _):
             return _FakePaginator(prefixes)
 
-    monkeypatch.setattr(s3, "_client", lambda: _FakeClient())
+    monkeypatch.setattr(s3, "client", lambda: _FakeClient())
     assert train_repo.list_model_versions("ios") == ["v1.0", "v1.2"]

@@ -27,14 +27,14 @@ app/
 ├── phase/               # ── 도메인 ④ 수집앱 IMU+영상 업로드·구간 라벨링·렙카운팅 모델 ──
 ├── exercises/           # ── 도메인 ⑤ 운동 종목 마스터 조회·시드 (엔티티는 core.models.Exercise) ──
 │   │                    #    도메인 모두 같은 내부 계층:
-│   ├── router.py        #    API(controller) — payload·query DTO 와 세션을 받아 service 에 넘기고 ApiResponse 로 포장
-│   ├── service.py       #    유스케이스 조율 (repository·utils 조립), 실패는 exceptions 를 가드 절에서 raise, DTO 반환
+│   ├── router.py        #    API(controller) — *Request DTO 를 풀어 기본 값으로 service 에 넘기고, 받은 *Response 를 ApiResponse 로 포장
+│   ├── service.py       #    유스케이스 조율 (repository·utils 조립), 실패는 exceptions 를 가드 절에서 raise, 기본 값을 받고 *Response 를 필드 이름으로 생성해 반환 (camelCase 는 모름)
 │   ├── utils.py         #    순수 계산 (I/O 없음 — 파일명·버전 채번, 라벨링·승격 가능 판정, 집계 윈도우 등)
 │   ├── enums.py         #    상태 Enum (phase: CollectStatus·PhaseModelStatus·ModelFormat), hybrid_property 와 도메인 상수가 참조
 │   ├── exceptions.py    #    도메인 예외 — HTTPException 하위, __init__ 에서 status_code·detail 명시
 │   ├── models.py        #    엔티티(SQLModel table=True) + Read 모델 — data: dataset_files, phase: collect_files·phase_labels·phase_models
 │   ├── repository.py    #    저장소 접근 (AsyncSession 을 인자로 받아 core.s3 와 함께 도메인별 read/write)
-│   └── schemas.py       #    요청·응답 DTO (SQLModel 비테이블, CamelModel — 바디·쿼리 모델과 응답 모델, before validator)
+│   └── schemas.py       #    요청·응답 DTO (SQLModel 비테이블, CamelModel) — 들어오는 바디·쿼리는 *Request, 나가는 응답은 *Response, 응답 안의 항목 모델은 이름만 (SkippedFile 등)
 │
 └── worker/              # ── 별도 프로세스 런타임 (학습·라벨링 서브프로세스) ──
     ├── trainer.py       #    학습 엔트리포인트 (training service가 subprocess로 실행)
@@ -50,8 +50,8 @@ mlflow/Dockerfile        # MLflow 추적 서버 이미지 (별도 컨테이너)
 
 | 층 | 역할 | 아는 것 / 모르는 것 |
 |------|------|----------|
-| `router` | HTTP 라우팅·형식 검증·응답 직렬화 | HTTP를 안다 / 업 규칙 모름 |
-| `service` | 유스케이스 순서 조율 | 흐름을 안다 / HTTP·SQL 모름 (예외적으로 HTTPException은 MVP 단순화로 허용) |
+| `router` | HTTP 라우팅·형식 검증, *Request 풀기 | HTTP와 DTO를 안다 / 업무 규칙 모름 |
+| `service` | 유스케이스 순서 조율, *Response 생성 | 흐름을 안다 / HTTP·SQL·*Request·camelCase 모름 (예외는 HTTPException 하위 도메인 예외로 던짐) |
 | `utils` | 순수 계산·불변식 | 규칙만 안다 / I/O 없음 |
 | `exceptions` | 도메인 예외(HTTPException 하위), 클래스마다 status_code·detail 명시 | 상태코드·메시지 / service 가 가드 절에서 던진다 |
 | `repository` | 저장소 read/write, 세션은 첫 인자로 받고 스스로 열지 않는다 | DB(SQLModel)·S3·MLflow를 안다 / 규칙 모름 |
