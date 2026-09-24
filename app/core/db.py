@@ -2,7 +2,6 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -67,15 +66,6 @@ async def session() -> AsyncIterator[AsyncSession]:
         except Exception:
             await s.rollback()
             raise
-
-
-async def require_tables(*names: str) -> None:
-    """테이블 없으면 마이그레이션 안내 후 종료"""
-    async with get_engine().connect() as conn:
-        tables = await conn.run_sync(lambda c: set(inspect(c).get_table_names()))
-    missing = sorted(set(names) - tables)
-    if missing:
-        raise SystemExit(f"{', '.join(missing)} 테이블이 없습니다. scripts/migrate.py 를 먼저 실행하세요.")
 
 
 def run(coro):

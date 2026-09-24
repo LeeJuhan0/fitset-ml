@@ -30,7 +30,7 @@
 | `GET` | `/api/v1/exercises` | 마스터 207종목, 모델 출력 인덱스·class·slug·이름·백엔드 id·phase 지원 여부 |
 | `POST` | `/api/v1/exercises/seed?source=` | class-mapping.json 으로 upsert. source 는 `s3://fitset-exercise-media/models/class-mapping.json` 또는 https, 생략 시 `CLASS_MAPPING_URL` |
 
-dataset_files, collect_files, phase_models 는 `exercise_fk` 로 마스터를 참조한다(마스터에 없는 종목은 NULL). 첫 기동 후 한 번 `PYTHONPATH=. python scripts/seed_exercises.py` 또는 seed API 를 호출한다.
+dataset_files, collect_files, phase_models 는 `exercise_fk` 로 마스터를 참조한다(마스터에 없는 종목은 NULL). 첫 기동 후 한 번 seed API 를 호출한다.
 
 ### 어드민 — 수집앱 영상 · 구간 라벨링 ([phase/router.py](app/phase/router.py))
 수집앱은 IMU CSV와 같은 이름의 영상을 쌍으로 올린다. 종목은 exercises 마스터(207건)에 있으면 전부 올릴 수 있다. 라벨링은 모든 종목에서 MediaPipe 관절 33개를 뽑아 pose.json 으로 남기고, 마스터에 각도 규칙(angle_joints, down_is_decreasing)이 있는 종목만 행마다 phase(0 내려감, 1 올라감, 2 멈춤, -1 미검출)를 붙인다. 규칙이 없는 종목은 관절만 있고 phase 는 -1 이다. 검증된 규칙은 스쿼트(hip,kn,an), 푸시업·덤벨컬(sh,el,wr)이고 시드가 채운다. 새 종목은 마스터 행의 두 열을 채우면 코드 수정 없이 열린다.
@@ -91,7 +91,7 @@ EC2 에 MySQL 을 직접 깔아 쓰는 순서.
 1. `sudo apt install mysql-server` 뒤 `sudo mysql < db/init-mysql.sql` (비밀번호는 파일에서 바꾼다).
 2. 테이블은 컨테이너 시작 때 마이그레이션이 만든다. 권한·문자셋은 `mysql -u fitset_ml -p fitset_ml -e "SELECT 1"` 로 접속만 확인한다.
 3. api 컨테이너 env 를 `DATABASE_URL=mysql+aiomysql://fitset_ml:비밀번호@호스트:3306/fitset_ml?charset=utf8mb4` 로. 컨테이너에서 호스트 MySQL 로 붙으려면 호스트는 `host.docker.internal`(compose 에 `extra_hosts: ["host.docker.internal:host-gateway"]`) 이고 MySQL 의 `bind-address` 가 docker 브리지에서 닿아야 한다.
-4. 기존 index.json 이관과 마스터 시드. 이미지에 scripts/ 가 들어 있으므로 EC2 에서 `docker exec fitset-ml-admin python scripts/migrate_index_to_db.py` 와 `docker exec fitset-ml-admin python scripts/seed_exercises.py` 로 돌린다(컨테이너 env 의 DATABASE_URL 사용). 버킷 폴더가 없으면 `docker exec fitset-ml-admin python scripts/init_buckets.py`.
+4. 마스터 시드는 seed API 로 한다. 버킷 폴더가 없으면 `docker exec fitset-ml-admin python scripts/init_buckets.py`.
 
 | 테이블 | 내용 | 관계 |
 |--------|------|------|
@@ -104,7 +104,7 @@ EC2 에 MySQL 을 직접 깔아 쓰는 순서.
 | `phase_models` | 종목별 렙카운팅 모델 버전, pt·onnx·mlpackage 키, 지표 | platform, files(N:M dataset_files) |
 | `phase_model_files` | 모델 학습에 쓰인 파일 링크 | phase_model, dataset_file |
 
-기존 index.json 은 `PYTHONPATH=. python scripts/migrate_index_to_db.py` 로 한 번 옮긴다(멱등). 테이블 정의는 [docs/file-ledger.dbml](docs/file-ledger.dbml).
+테이블 정의는 [docs/file-ledger.dbml](docs/file-ledger.dbml).
 
 ## 인프라
 
