@@ -168,8 +168,8 @@ class CollectFileRead(CollectFileBase):
     @computed_field
     @property
     def can_promote(self) -> bool:
-        """승격 가능, 업로드 완료·미승격, 라벨은 선택"""
-        return self.uploaded and self.dataset_file is None
+        """승격 가능, 업로드 완료·미승격 또는 복사 중단, 라벨은 선택"""
+        return self.uploaded and (self.dataset_file is None or not self.dataset_file.uploaded)
 
     @classmethod
     def from_row(cls, r: CollectFile) -> "CollectFileRead":

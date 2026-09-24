@@ -1130,7 +1130,7 @@ function videoStatusPill(f) {
   if (f.uploaded === false) return '<span class="pill pending">업로드 대기</span>';
   const cls = { pending: 'idle', labeling: 'labeling', labeled: 'labeled', failed: 'failed' }[f.status] ?? 'idle';
   const title = f.status === 'failed' && f.error ? ` title="${f.error.replace(/"/g, '&quot;')}"` : '';
-  const promoted = f.datasetFile ? ` <span class="pill promoted" title="${f.datasetFile.s3Key}">승격됨</span>` : '';
+  const promoted = f.datasetFile?.uploaded ?` <span class="pill promoted" title="${f.datasetFile.s3Key}">승격됨</span>` : '';
   return `<span class="pill ${cls}"${title}>${STATUS_LABEL[f.status] ?? f.status}</span>${promoted}`;
 }
 

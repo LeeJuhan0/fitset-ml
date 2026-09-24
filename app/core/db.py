@@ -8,11 +8,13 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from .config import settings
 
+DSN = settings.database_url
+
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker | None = None
 
 
-def _register_models() -> None:
+def register_models() -> None:
     """엔티티 모듈 import, 문자열 관계 해석용"""
     from app.core import models
     from app.data import models as data_models
@@ -21,8 +23,8 @@ def _register_models() -> None:
 
 def create_engine(dsn: str | None = None) -> AsyncEngine:
     """비동기 엔진 생성, pool_pre_ping, echo 끔"""
-    _register_models()
-    return create_async_engine(dsn or settings.database_url, echo=False, pool_pre_ping=True)
+    register_models()
+    return create_async_engine(dsn or DSN, echo=False, pool_pre_ping=True)
 
 
 def create_session(engine: AsyncEngine | None = None) -> async_sessionmaker:

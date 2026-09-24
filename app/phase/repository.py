@@ -142,9 +142,11 @@ async def finish_label(s: AsyncSession, platform: str, filename: str, *, data_bu
     s.add(row)
 
 
-async def promote(s: AsyncSession, platform: str, filename: str, *, dataset_filename: str, bucket: str, key: str, phase_labeled: bool) -> DatasetFileRead:
-    """dataset_files 행 삽입, collect_files 연결, promoted_at"""
+async def reserve_promotion(s: AsyncSession, platform: str, filename: str, *, dataset_filename: str, bucket: str, key: str, phase_labeled: bool) -> DatasetFileRead:
+    """승격 1단계, uploaded False 행 선점, 재시도면 기존 행"""
     row = await _row(s, platform, filename)
+    if row.dataset_file is not None:
+        return DatasetFileRead.from_row(row.dataset_file)
     dataset = DatasetFile(
         platform=row.platform,
         device=row.device,
@@ -153,23 +155,32 @@ async def promote(s: AsyncSession, platform: str, filename: str, *, dataset_file
         class_name=row.class_name,
         bucket=bucket,
         s3_key=key,
-        uploaded=True,
+        uploaded=False,
         phase_labeled=phase_labeled,
     )
     s.add(dataset)
     await s.flush()
     row.dataset_file = dataset
-    row.promoted_at = utcnow()
     s.add(row)
     await s.flush()
     return DatasetFileRead.from_row(dataset)
 
 
+async def complete_promotion(s: AsyncSession, platform: str, filename: str) -> None:
+    """승격 2단계, S3 복사 후 uploaded True, promoted_at"""
+    row = await _row(s, platform, filename)
+    row.dataset_file.uploaded = True
+    row.promoted_at = utcnow()
+    s.add(row.dataset_file)
+    s.add(row)
+
+
 async def phase_labeled_files(s: AsyncSession, platform: str, class_name: str) -> list[DatasetFileRead]:
-    """렙카운팅 학습 후보, 종목의 phase_labeled 파일"""
+    """렙카운팅 학습 후보, 종목의 phase_labeled 업로드 완료 파일"""
     rows = (await s.exec(
         select(DatasetFile).join(Platform).where(
-            Platform.name == platform, DatasetFile.class_name == class_name, DatasetFile.phase_labeled.is_(True)
+            Platform.name == platform, DatasetFile.class_name == class_name,
+            DatasetFile.phase_labeled.is_(True), DatasetFile.uploaded.is_(True),
         ).order_by(DatasetFile.id)
     )).all()
     return [DatasetFileRead.from_row(r) for r in rows]

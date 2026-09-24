@@ -17,10 +17,14 @@ ADD https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmar
 COPY app /srv/app
 COPY scripts /srv/scripts
 COPY db /srv/db
+COPY alembic /srv/alembic
+COPY alembic.ini /srv/alembic.ini
+COPY docker/entrypoint.sh /srv/docker/entrypoint.sh
 
 ENV PYTHONPATH=/srv
 ENV POSE_MODEL_PATH=/srv/models/pose_landmarker_full.task
 
 EXPOSE 8000
 
+ENTRYPOINT ["/srv/docker/entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

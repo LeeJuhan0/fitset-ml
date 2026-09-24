@@ -76,20 +76,20 @@ dataset_files, collect_files, phase_models 는 `exercise_fk` 로 마스터를 �
 
 ## 파일 목록 DB
 
-파일 목록은 2026-09-22 부터 S3 index.json 이 아니라 DB(SQLModel 엔티티, [core/models.py](app/core/models.py)·[data/models.py](app/data/models.py)·[phase/models.py](app/phase/models.py))가 정본이다. S3 에는 객체만 둔다. 관리자 전용이라 트래픽이 작아 sqlite 파일을 쓴다. EC2 는 api 컨테이너의 `/data` 볼륨(`sqlite+aiosqlite:////data/fitset_ml.db`), 로컬·테스트는 작업 디렉토리 파일이다. 접근은 SQLAlchemy 비동기 엔진과 AsyncSession 이고, MySQL 이 필요해지면 `DATABASE_URL` 을 `mysql+aiomysql://` 로 바꾸면 된다. 테이블은 앱 기동 시 없으면 만든다(`create_all`). 수동으로 만들거나 검토하려면 DDL 파일을 쓴다.
+파일 목록은 2026-09-22 부터 S3 index.json 이 아니라 DB(SQLModel 엔티티, [core/models.py](app/core/models.py)·[data/models.py](app/data/models.py)·[phase/models.py](app/phase/models.py))가 정본이다. S3 에는 객체만 둔다. 관리자 전용이라 트래픽이 작아 sqlite 파일을 쓴다. EC2 는 api 컨테이너의 `/data` 볼륨(`sqlite+aiosqlite:////data/fitset_ml.db`), 로컬·테스트는 작업 디렉토리 파일이다. 접근은 SQLAlchemy 비동기 엔진과 AsyncSession 이고, MySQL 이 필요해지면 `DATABASE_URL` 을 `mysql+aiomysql://` 로 바꾸면 된다. 스키마는 Alembic 마이그레이션(`alembic/versions/`)이 정본이다. 컨테이너가 시작할 때 엔트리포인트(`docker/entrypoint.sh` → `scripts/migrate.py`)가 `upgrade head` 를 먼저 돌린다. `create_all` 로 만든 기존 DB 는 초기 리비전으로 표시한 뒤 적용한다. 로컬에서 서버를 띄우기 전에는 `PYTHONPATH=. python scripts/migrate.py` 를 한 번 돌린다.
+
+모델을 바꾸면 로컬에서 `alembic upgrade head` 로 DB 를 최신으로 맞춘 뒤 `alembic revision --autogenerate -m "설명"` 으로 스크립트를 만들고, 생성된 파일을 확인해 모델과 함께 커밋한다. 배포하면 컨테이너 시작 때 자동 적용된다.
 
 | 파일 | 용도 |
 |------|------|
 | [db/init-mysql.sql](db/init-mysql.sql) | EC2 MySQL 에서 root 로 한 번. 데이터베이스 `fitset_ml` 과 계정 생성 |
-| [db/ddl-mysql.sql](db/ddl-mysql.sql) | MySQL 8 DDL, 테이블 8개와 인덱스. 엔티티에서 생성한 파일이라 손으로 고치지 않는다 |
-| [db/ddl-sqlite.sql](db/ddl-sqlite.sql) | 같은 스키마의 SQLite 판 |
 
-DDL 은 `PYTHONPATH=. python scripts/print_ddl.py --dialect mysql > db/ddl-mysql.sql` 로 다시 뽑는다. 엔티티를 바꾸면 이 파일도 같이 갱신한다. `db/` 는 실행용 SQL 만 둔다.
+스키마를 SQL 로 검토해야 하면 `alembic upgrade head --sql` 로 마이그레이션을 SQL 로 뽑는다. `db/` 는 계정 생성용 SQL 만 둔다.
 
 EC2 에 MySQL 을 직접 깔아 쓰는 순서.
 
 1. `sudo apt install mysql-server` 뒤 `sudo mysql < db/init-mysql.sql` (비밀번호는 파일에서 바꾼다).
-2. `mysql -u fitset_ml -p fitset_ml < db/ddl-mysql.sql`. 앱 기동 시 `create_all` 이 있으므로 생략해도 되지만 권한·문자셋 확인용으로 한 번 돌려 본다.
+2. 테이블은 컨테이너 시작 때 마이그레이션이 만든다. 권한·문자셋은 `mysql -u fitset_ml -p fitset_ml -e "SELECT 1"` 로 접속만 확인한다.
 3. api 컨테이너 env 를 `DATABASE_URL=mysql+aiomysql://fitset_ml:비밀번호@호스트:3306/fitset_ml?charset=utf8mb4` 로. 컨테이너에서 호스트 MySQL 로 붙으려면 호스트는 `host.docker.internal`(compose 에 `extra_hosts: ["host.docker.internal:host-gateway"]`) 이고 MySQL 의 `bind-address` 가 docker 브리지에서 닿아야 한다.
 4. 기존 index.json 이관과 마스터 시드. 이미지에 scripts/ 가 들어 있으므로 EC2 에서 `docker exec fitset-ml-admin python scripts/migrate_index_to_db.py` 와 `docker exec fitset-ml-admin python scripts/seed_exercises.py` 로 돌린다(컨테이너 env 의 DATABASE_URL 사용). 버킷 폴더가 없으면 `docker exec fitset-ml-admin python scripts/init_buckets.py`.
 

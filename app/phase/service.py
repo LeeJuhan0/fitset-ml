@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 
+from botocore.exceptions import BotoCoreError, ClientError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core import s3
@@ -57,9 +58,10 @@ from app.phase.repository import (
     phase_model_versions,
     presigned_get_url,
     presigned_put_url,
-    promote as promote_row,
+    complete_promotion,
     read_pose,
     reserve_collect,
+    reserve_promotion,
 )
 
 PUT_EXPIRES_SECONDS = 600
@@ -180,7 +182,7 @@ def _copy_to_dataset(entry: CollectFileRead, key: str) -> str:
 
 
 async def promote(s: AsyncSession, platform: str, payload: PromoteRequest) -> PromoteData:
-    """승격, dataset 버킷 복사, dataset_files 등록, 건너뛴 사유"""
+    """승격, DB 행 선점 후 S3 복사, 재실행 시 이어서 완료"""
     filenames = payload.filenames
     if not filenames:
         raise EmptyFilenamesError()
@@ -193,11 +195,18 @@ async def promote(s: AsyncSession, platform: str, payload: PromoteRequest) -> Pr
             skipped.append({"filename": name, "reason": reason})
             continue
         key = s3._csv_key(platform, await folder_for(s, entry.class_name), utils.dataset_filename(name))
-        await asyncio.to_thread(_copy_to_dataset, entry, key)
-        await promote_row(s, 
+        dataset = await reserve_promotion(s,
             platform, name, dataset_filename=utils.dataset_filename(name),
             bucket=settings.raw_data_bucket, key=key, phase_labeled=bool(entry.label and entry.label.has_phase),
         )
+        await s.commit()
+        try:
+            await asyncio.to_thread(_copy_to_dataset, entry, dataset.s3_key)
+        except (BotoCoreError, ClientError, OSError):
+            skipped.append({"filename": name, "reason": "S3 복사 실패, 다시 승격하면 이어서 진행"})
+            continue
+        await complete_promotion(s, platform, name)
+        await s.commit()
         promoted.append(name)
     return PromoteData.model_validate({"promoted": promoted, "skipped": skipped})
 

@@ -72,12 +72,12 @@ def dataset_filename(filename: str) -> str:
 
 
 def promote_block_reason(entry: CollectFileRead | None) -> str | None:
-    """승격 불가 사유, 미업로드, 이미 승격, 라벨 미완료"""
+    """승격 불가 사유, 미업로드, 이미 승격, 복사 중단분은 재시도 허용"""
     if entry is None:
         return "목록에 없는 파일"
     if not entry.uploaded:
         return "업로드 미완료"
-    if entry.dataset_file is not None:
+    if entry.dataset_file is not None and entry.dataset_file.uploaded:
         return "이미 승격됨"
     return None
 

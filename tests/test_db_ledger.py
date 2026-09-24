@@ -107,11 +107,15 @@ def test_promote_and_phase_model_lifecycle(fresh_db):
         "ios", name, data_bucket="fitset-collect-labeled", data_key="ios/PUSHUP/PUSHUP_DEV1_0001.parquet",
         video_bucket="fitset-collect-labeled", video_key="v", pose_key="p", phase_summary={"rows": 2170},
     )
-    dataset = run(phase_repo.promote, 
-        "ios", name, dataset_filename="PUSHUP_DEV1_0001.parquet", bucket="fitset-dataset",
-        key="ios/raw/PUSHUP/PUSHUP_DEV1_0001.parquet", phase_labeled=True,
-    )
-    assert dataset.filename == "PUSHUP_DEV1_0001.parquet" and dataset.uploaded and dataset.phase_labeled
+    promote_kw = dict(dataset_filename="PUSHUP_DEV1_0001.parquet", bucket="fitset-dataset",
+                      key="ios/raw/PUSHUP/PUSHUP_DEV1_0001.parquet", phase_labeled=True)
+    dataset = run(phase_repo.reserve_promotion, "ios", name, **promote_kw)
+    assert dataset.filename == "PUSHUP_DEV1_0001.parquet" and not dataset.uploaded and dataset.phase_labeled
+    assert run(phase_repo.get_file, "ios", name).promoted_at is None
+    assert run(phase_repo.phase_labeled_files, "ios", "PUSHUP") == []
+    assert "PUSHUP_DEV1_0001.parquet" not in run(train_repo.uploaded_filenames, "ios")
+    assert run(phase_repo.reserve_promotion, "ios", name, **promote_kw).id == dataset.id
+    run(phase_repo.complete_promotion, "ios", name)
     entry = run(phase_repo.get_file, "ios", name)
     assert entry.dataset_file.id == dataset.id and entry.promoted_at is not None
     assert [f.filename for f in run(data_repo.list_files, "ios")] == ["PUSHUP_DEV1_0001.parquet"]

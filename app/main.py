@@ -4,7 +4,6 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.core.db import init_db
 from app.core.exception_register import ERROR_DOC, register_exception_handlers
 from app.core.logging import configure_logging, register_trace_middleware
 from app.core.security import register_static_basic_guard
@@ -47,6 +46,5 @@ app.include_router(phase_router, prefix="/api/v1", responses=ERROR_DOC)
 app.include_router(train_router, prefix="/api/v1", responses=ERROR_DOC)
 app.include_router(deploy_router, prefix="/api/v1", responses=ERROR_DOC)
 app.include_router(mlflow_proxy_router)
-app.router.on_startup.append(init_db)
 
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

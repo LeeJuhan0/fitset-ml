@@ -154,7 +154,8 @@ def test_promote_copies_label_and_skips_others(admin_client, monkeypatch):
     ]))
     rows = []
     monkeypatch.setattr(phase_mod, "_copy_to_dataset", lambda e, key: key)
-    monkeypatch.setattr(phase_mod, "promote_row", async_(lambda s, p, name, **kw: rows.append((name, kw)) or _dataset()))
+    monkeypatch.setattr(phase_mod, "reserve_promotion", async_(lambda s, p, name, **kw: rows.append((name, kw)) or _dataset()))
+    monkeypatch.setattr(phase_mod, "complete_promotion", async_(lambda s, p, name: None))
 
     resp = admin_client.post("/api/v1/ios/phase/promote", json={"filenames": [
         "PUSHUP_DEV1_0001.csv", "PUSHUP_DEV1_0002.csv", "PUSHUP_DEV1_0003.csv", "DEADLIFT_DEV1_0001.csv", "ghost.csv",
@@ -165,6 +166,27 @@ def test_promote_copies_label_and_skips_others(admin_client, monkeypatch):
     assert {s["filename"]: s["reason"] for s in data["skipped"]} == {"PUSHUP_DEV1_0003.csv": "이미 승격됨", "ghost.csv": "목록에 없는 파일"}
     flags = {name: kw["phase_labeled"] for name, kw in rows}
     assert flags == {"PUSHUP_DEV1_0001.csv": True, "PUSHUP_DEV1_0002.csv": False, "DEADLIFT_DEV1_0001.csv": False}
+
+
+def test_promote_s3_failure_skips_and_retry_resumes(admin_client, monkeypatch):
+    pending = _dataset().model_copy(update={"uploaded": False})
+    entry = _entry(status="labeled", label=_label()).model_copy(update={"dataset_file": pending})
+    monkeypatch.setattr(phase_mod, "list_files", async_(lambda s, p: [entry]))
+    monkeypatch.setattr(phase_mod, "reserve_promotion", async_(lambda s, p, name, **kw: pending))
+    completed = []
+    monkeypatch.setattr(phase_mod, "complete_promotion", async_(lambda s, p, name: completed.append(name)))
+
+    def boom(e, key):
+        raise OSError("s3 down")
+    monkeypatch.setattr(phase_mod, "_copy_to_dataset", boom)
+    data = admin_client.post("/api/v1/ios/phase/promote", json={"filenames": ["PUSHUP_DEV1_0001.csv"]}).json()["data"]
+    assert data["promoted"] == [] and "다시 승격" in data["skipped"][0]["reason"] and completed == []
+
+    copied = []
+    monkeypatch.setattr(phase_mod, "_copy_to_dataset", lambda e, key: copied.append(key) or key)
+    data = admin_client.post("/api/v1/ios/phase/promote", json={"filenames": ["PUSHUP_DEV1_0001.csv"]}).json()["data"]
+    assert data["promoted"] == ["PUSHUP_DEV1_0001.csv"] and completed == ["PUSHUP_DEV1_0001.csv"]
+    assert copied == [pending.s3_key]
 
 
 def test_train_validates_class_and_files(admin_client, monkeypatch):

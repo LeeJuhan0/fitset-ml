@@ -1,0 +1,19 @@
+[project]
+name = "fitset-ml-server"
+version = "0.1.0"
+description = "FitSet ML 관리자 서버"
+authors = [
+    {name = "LeeJuhan0",email = "wngks3214@gmail.com"}
+]
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "alembic (>=1.20.0,<2.0.0)",
+    "greenlet (>=3.5.6,<4.0.0)"
+]
+
+[tool.poetry]
+package-mode = false
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
