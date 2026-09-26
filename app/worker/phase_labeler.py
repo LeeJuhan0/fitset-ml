@@ -11,7 +11,7 @@ import pandas as pd
 from app.core import db, s3
 from app.core.config import settings
 from app.phase.models import CollectFileRead
-from app.exercises.repository import phase_rule
+from app.motions.utils import load_motion
 from app.phase.repository import finish_label, get_file, set_status
 from app.worker import phase_algo as algo
 
@@ -38,8 +38,8 @@ def ensure_model() -> str:
     return path
 
 
-def extract_pose(video_path: str, joints: tuple | None) -> tuple[np.ndarray, list, float]:
-    """MediaPipe 프레임별 각도, 랜드마크 33개, 회전 자동"""
+def extract_pose(video_path: str, motion) -> tuple[np.ndarray, list, float]:
+    """MediaPipe 프레임별 판정 신호, 랜드마크 33개, 회전 자동"""
     import cv2
     import mediapipe as mp
     from mediapipe.tasks import python as mp_python
@@ -55,7 +55,7 @@ def extract_pose(video_path: str, joints: tuple | None) -> tuple[np.ndarray, lis
     cap = cv2.VideoCapture(video_path)
     cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 1)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    angles, landmarks = [], []
+    world, image, vis, landmarks = [], [], [], []
     i = 0
     while True:
         ok, frame = cap.read()
@@ -65,45 +65,49 @@ def extract_pose(video_path: str, joints: tuple | None) -> tuple[np.ndarray, lis
         res = landmarker.detect_for_video(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb), int(i * 1000 / fps))
         i += 1
         if not res.pose_landmarks:
-            angles.append(np.nan)
+            world.append(np.full((33, 3), np.nan))
+            image.append(np.full((33, 3), np.nan))
+            vis.append(np.zeros(33))
             landmarks.append(None)
             continue
         lm = res.pose_landmarks[0]
-        world = res.pose_world_landmarks[0]
+        aspect = frame.shape[1] / frame.shape[0]
         landmarks.append([[round(p.x, 3), round(p.y, 3), round(p.visibility, 2)] for p in lm])
-        if joints is None:
-            angles.append(np.nan)
-            continue
-        vis = np.mean([lm[algo.LM[j][algo.SIDE]].visibility for j in joints])
-        if vis < algo.MIN_VISIBILITY:
-            angles.append(np.nan)
-            continue
-        pts = [np.array([world[algo.LM[j][algo.SIDE]].x, world[algo.LM[j][algo.SIDE]].y, world[algo.LM[j][algo.SIDE]].z]) for j in joints]
-        angles.append(algo.angle(*pts))
+        world.append([[p.x, p.y, p.z] for p in res.pose_world_landmarks[0]])
+        image.append([[p.x * aspect, p.y, 0.0] for p in lm])
+        vis.append([p.visibility for p in lm])
     cap.release()
     landmarker.close()
-    return np.array(angles, dtype=float), landmarks, fps
+    return motion_signal(motion, np.array(world, dtype=float), np.array(image, dtype=float), np.array(vis, dtype=float)), landmarks, fps
+
+
+def motion_signal(motion, world: np.ndarray, image: np.ndarray, vis: np.ndarray) -> np.ndarray:
+    """종목 판정 신호, 관절 가시성 낮은 프레임 NaN"""
+    if motion is None or len(world) == 0:
+        return np.full(len(world), np.nan)
+    signal = np.asarray(motion.signal(world, image), dtype=float)
+    signal[vis[:, list(motion.LANDMARKS)].mean(axis=1) < algo.MIN_VISIBILITY] = np.nan
+    return signal
 
 
 def label_file(platform: str, entry: CollectFileRead, workdir: str) -> dict:
     """다운로드, 추출, phase 부착, labeled 버킷 업로드 복사"""
     filename, class_name = entry.filename, entry.class_name
     stem = filename[:-4]
-    rule = db.run(_with_session(phase_rule, class_name))
-    joints, down_is_decreasing = rule if rule is not None else (None, True)
+    motion = load_motion(class_name)
     csv_path = os.path.join(workdir, filename)
     video_path = os.path.join(workdir, stem + VIDEO_EXT)
     s3.download_object(entry.csv_bucket, entry.csv_key, csv_path)
     s3.download_object(entry.video_bucket, entry.video_key, video_path)
 
-    angles, landmarks, fps = extract_pose(video_path, joints)
-    phase = algo.phases_from_angles(angles, fps, down_is_decreasing)
+    angles, landmarks, fps = extract_pose(video_path, motion)
+    phase = algo.phases_from_angles(angles, fps, motion.DOWN_IS_DECREASING if motion is not None else True)
     df = pd.read_csv(csv_path)
     df.columns = df.columns.str.strip()
     row_phase = algo.row_phases(df["timestamp"].to_numpy(dtype=float), phase, fps, float(entry.video_start))
     df["phase"] = np.array(row_phase, dtype=np.int8)
     summary = algo.summarize(angles, fps, row_phase)
-    summary["hasPhase"] = rule is not None
+    summary["hasPhase"] = motion is not None
 
     data_path = os.path.join(workdir, stem + DATA_EXT)
     df.to_parquet(data_path, index=False)

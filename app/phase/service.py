@@ -36,7 +36,8 @@ from app.phase.exceptions import (
     UnsupportedPhaseClassError,
 )
 from app.data.exceptions import InvalidDeviceIdError, ReservationNotFoundError, UnsupportedClassError
-from app.exercises.repository import folder_for, is_class_known, phase_rule
+from app.exercises.repository import folder_for, is_class_known
+from app.motions.utils import load_motion
 from app.phase.models import CollectFileRead
 from app.phase.repository import (
     CONTENT_TYPES,
@@ -200,7 +201,7 @@ async def promote(s: AsyncSession, platform: str, filenames: list[str]) -> Promo
 
 async def start_phase_training(s: AsyncSession, platform: str, class_name: str, filenames: list[str] | None, *, epochs: int, lr: float, window: int, stride: int) -> PhaseTrainResponse:
     """종목 검증, 파일 확정, 버전 채번, 워커 spawn"""
-    if await phase_rule(s, class_name) is None:
+    if load_motion(class_name) is None:
         raise UnsupportedPhaseClassError(class_name)
     candidates = {f.filename for f in await phase_labeled_files(s, platform, class_name)}
     chosen = sorted(candidates) if filenames is None else list(filenames)

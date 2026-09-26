@@ -95,9 +95,7 @@ class ExerciseBase(SQLModel):
     slug: str = Field(max_length=64, unique=True, description="백엔드 exercises API slug")
     name: str = Field(max_length=128, description="한글 이름")
     exercise_id: str | None = Field(default=None, max_length=36, description="백엔드 exercise UUID")
-    phase_supported: bool = Field(default=False, description="구간 라벨링, 렙카운팅 모델 지원 여부, angle_joints 유무로 결정")
-    angle_joints: str | None = Field(default=None, max_length=32, description="각도를 만드는 관절 3개, 예 hip,kn,an")
-    down_is_decreasing: bool | None = Field(default=None, description="각도가 줄어드는 방향이 내려감인지")
+    phase_supported: bool = Field(default=False, description="구간 라벨링, 렙카운팅 모델 지원 여부, app/motions 판정 모듈 유무로 결정")
 
 
 class Exercise(ExerciseBase, table=True):

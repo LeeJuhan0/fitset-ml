@@ -2,7 +2,6 @@ import itertools
 
 import numpy as np
 
-from app.exercises.utils import PHASE_RULES
 from scipy.signal import medfilt, savgol_filter
 
 SMOOTH_SECONDS = 0.3
@@ -13,21 +12,9 @@ MIN_PAUSE_SECONDS = 0.4
 MIN_SWING_DEG = 25.0
 MIN_VISIBILITY = 0.5
 
-LM = dict(sh=(11, 12), el=(13, 14), wr=(15, 16), hip=(23, 24), kn=(25, 26), an=(27, 28))
-SIDE = 0
-
-SIGNALS = {name: (tuple(joints.split(",")), down) for name, (joints, down) in PHASE_RULES.items()}
-
-
-def angle(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> float:
-    """세 점 꼭짓점 각도, 도 단위"""
-    v1, v2 = a - b, c - b
-    cos = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-9)
-    return float(np.degrees(np.arccos(np.clip(cos, -1, 1))))
-
 
 def phases_from_angles(raw: np.ndarray, fps: float, down_is_decreasing: bool) -> np.ndarray:
-    """각도 시계열 → phase, 스무딩, 각속도, 멈춤, 미검출 -1"""
+    """판정 신호 시계열 → phase, 스무딩, 속도, 멈춤, 미검출 -1"""
     n = len(raw)
     detected = ~np.isnan(raw)
     if detected.sum() < 5:

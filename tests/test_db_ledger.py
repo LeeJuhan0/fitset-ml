@@ -145,18 +145,15 @@ def test_exercises_seed_and_reference(fresh_db):
         {"index": 0, "class": "SQUAT", "slug": "bodyweight-squat", "name": "맨몸 스쿼트", "exerciseId": "u1"},
         {"index": 1, "class": "PUSHUP", "slug": "push-up", "name": "푸시업", "exerciseId": "u2"},
         {"index": 7, "class": "DEADLIFT", "slug": "deadlift", "name": "데드리프트", "exerciseId": "u3"},
+        {"index": 30, "class": "WALL_SIT", "slug": "wall-sit", "name": "월싯", "exerciseId": "u4"},
     ]
-    assert run(ex_repo.upsert_exercises, mapping) == {"added": 3, "updated": 0}
+    assert run(ex_repo.upsert_exercises, mapping) == {"added": 4, "updated": 0}
     mapping[1]["name"] = "푸쉬업"
-    assert run(ex_repo.upsert_exercises, mapping) == {"added": 0, "updated": 3}
+    assert run(ex_repo.upsert_exercises, mapping) == {"added": 0, "updated": 4}
     rows = run(ex_repo.list_exercises)
-    assert [r.index for r in rows] == [0, 1, 7]
-    assert rows[1].name == "푸쉬업" and rows[1].phase_supported is True and rows[2].phase_supported is False
-    assert rows[1].angle_joints == "sh,el,wr" and rows[1].down_is_decreasing is True and rows[2].angle_joints is None
-    import app.exercises.repository as ex_repo2
-    assert run(ex_repo2.phase_rule, "PUSHUP") == (("sh", "el", "wr"), True)
-    assert run(ex_repo2.phase_rule, "DEADLIFT") is None
-    assert run(ex_repo2.is_class_known, "DEADLIFT") and run(ex_repo2.is_class_known, "WALL_SIT") is False
+    assert [r.index for r in rows] == [0, 1, 7, 30]
+    assert rows[1].name == "푸쉬업" and rows[1].phase_supported is True and rows[3].phase_supported is False
+    assert run(ex_repo.is_class_known, "WALL_SIT") and run(ex_repo.is_class_known, "PLANK") is False
 
     f1 = run(data_repo.reserve_admin_upload, "ios", "PUSHUP", "DEV1")[0]
     c1 = run(phase_repo.reserve_collect, "ios", "SQUAT", "DEV1")

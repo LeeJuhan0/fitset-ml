@@ -54,7 +54,7 @@ class UnsupportedPhaseClassError(HTTPException):
         """상태코드와 detail 고정"""
         super().__init__(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"각도 규칙이 없는 종목: {class_name}. exercises 의 angle_joints 와 down_is_decreasing 을 채우면 된다",
+            detail=f"판정 모듈이 없는 종목: {class_name}. app/motions 에 {class_name.lower()}_util.py 를 추가하면 된다",
         )
 
 

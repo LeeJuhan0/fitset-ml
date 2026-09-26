@@ -74,8 +74,3 @@ def test_windows_majority_and_rep_count():
     assert algo.count_reps([2, 0, 0, 1, 1, 2, 0, 1, 0]) == 2
     assert algo.count_reps([0, 0, 0]) == 0
 
-
-def test_angle_of_straight_and_right_angle():
-    o = np.zeros(3)
-    assert round(algo.angle(np.array([1.0, 0, 0]), o, np.array([-1.0, 0, 0]))) == 180
-    assert round(algo.angle(np.array([1.0, 0, 0]), o, np.array([0, 1.0, 0]))) == 90

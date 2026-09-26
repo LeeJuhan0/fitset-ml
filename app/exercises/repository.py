@@ -3,7 +3,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import CLASSES
 from app.core.models import Exercise, ExerciseRead, find_exercise
-from app.exercises.utils import PHASE_RULES, class_folder, parse_rule
+from app.exercises.utils import class_folder
+from app.motions.utils import load_motion
 
 
 async def list_exercises(s: AsyncSession) -> list[ExerciseRead]:
@@ -13,13 +14,11 @@ async def list_exercises(s: AsyncSession) -> list[ExerciseRead]:
 
 
 async def upsert_exercises(s: AsyncSession, items: list[dict]) -> dict:
-    """class-mapping 항목 upsert, 검증된 각도 규칙 반영, 추가 갱신 수"""
+    """class-mapping 항목 upsert, 판정 모듈 유무 반영, 추가 갱신 수"""
     added = updated = 0
     existing = {r.class_name: r for r in (await s.exec(select(Exercise))).all()}
     for it in items:
         values = dict(index=int(it["index"]), class_name=it["class"], slug=it["slug"], name=it["name"], exercise_id=it.get("exerciseId"))
-        if it["class"] in PHASE_RULES:
-            values["angle_joints"], values["down_is_decreasing"] = PHASE_RULES[it["class"]]
         row = existing.get(it["class"])
         if row is None:
             row = Exercise(**values)
@@ -28,7 +27,7 @@ async def upsert_exercises(s: AsyncSession, items: list[dict]) -> dict:
             for k, v in values.items():
                 setattr(row, k, v)
             updated += 1
-        row.phase_supported = parse_rule(row.angle_joints, row.down_is_decreasing) is not None
+        row.phase_supported = load_motion(row.class_name) is not None
         s.add(row)
     return {"added": added, "updated": updated}
 
@@ -38,16 +37,6 @@ async def is_class_known(s: AsyncSession, class_name: str) -> bool:
     if class_name in CLASSES:
         return True
     return await find_exercise(s, class_name) is not None
-
-
-async def phase_rule(s: AsyncSession, class_name: str) -> tuple[tuple[str, ...], bool] | None:
-    """종목의 각도 규칙, 마스터 우선, 없으면 검증된 상수, 둘 다 없으면 None"""
-    row = await find_exercise(s, class_name)
-    if row is not None and parse_rule(row.angle_joints, row.down_is_decreasing) is not None:
-        return parse_rule(row.angle_joints, row.down_is_decreasing)
-    if class_name in PHASE_RULES:
-        return parse_rule(*PHASE_RULES[class_name])
-    return None
 
 
 async def folder_for(s: AsyncSession, class_name: str) -> str:
