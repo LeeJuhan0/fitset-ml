@@ -7,6 +7,7 @@ from app.data.schemas import PresignedUrlRequest
 from app.core.security import check_basic_auth
 from app.deps import DbSessionDep, get_trace_id, validate_platform
 from app.phase import service
+from app.phase.models import PhaseModelRead
 from app.phase.schemas import (
     LabelResponse,
     LabelRequest,
@@ -125,6 +126,27 @@ async def models(
 ):
     """렙카운팅 모델 목록, 종목 필터"""
     return ApiResponse(trace_id=trace_id, data=await service.models(session, platform, query.class_name))
+
+
+@router.get("/{platform}/phase/models/deployed", response_model=ApiResponse[ListModelsResponse])
+async def deployed_models(
+    session: DbSessionDep,
+    platform: str = Depends(validate_platform),
+    trace_id: str = Depends(get_trace_id),
+):
+    """종목별 배포된 렙카운팅 모델, 앱이 버전 확인에 사용"""
+    return ApiResponse(trace_id=trace_id, data=await service.deployed_models(session, platform))
+
+
+@router.post("/{platform}/phase/models/{model_id}/deploy", response_model=ApiResponse[PhaseModelRead])
+async def deploy_model(
+    session: DbSessionDep,
+    model_id: int,
+    platform: str = Depends(validate_platform),
+    trace_id: str = Depends(get_trace_id),
+):
+    """렙카운팅 모델 배포, 같은 종목 기존 배포 교체, 롤백 겸용"""
+    return ApiResponse(trace_id=trace_id, data=await service.deploy_model(session, platform, model_id))
 
 
 @router.get("/{platform}/phase/models/{model_id}/download-url", response_model=ApiResponse[ModelUrlResponse])

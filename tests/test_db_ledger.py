@@ -136,7 +136,14 @@ def test_promote_and_phase_model_lifecycle(fresh_db):
     assert [f.filename for f in row.files] == ["PUSHUP_DEV1_0001.parquet"]
     run(phase_repo.fail_phase_model, model.id, "boom")
     assert run(phase_repo.get_phase_model, "ios", model.id).error == "boom"
-    assert run(phase_repo.list_phase_models, "ios", "SQUAT") == [] and len(run(phase_repo.list_phase_models, "ios")) == 1
+
+    newer = run(phase_repo.create_phase_model, "ios", "PUSHUP", "v1.1", ["PUSHUP_DEV1_0001.parquet"], window=50, stride=5, epochs=3)
+    assert run(phase_repo.deploy_phase_model, "ios", model.id).deployed_at is not None
+    assert run(phase_repo.deploy_phase_model, "ios", newer.id).deployed_at is not None
+    assert [(m.version, m.class_name) for m in run(phase_repo.deployed_phase_models, "ios")] == [("v1.1", "PUSHUP")]
+    assert run(phase_repo.get_phase_model, "ios", model.id).deployed_at is None
+    assert run(phase_repo.deploy_phase_model, "android", model.id) is None
+    assert run(phase_repo.list_phase_models, "ios", "SQUAT") == [] and len(run(phase_repo.list_phase_models, "ios")) == 2
 
 
 def test_exercises_seed_and_reference(fresh_db):

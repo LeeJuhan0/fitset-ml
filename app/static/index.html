@@ -103,6 +103,8 @@
     .mlflow-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
 
     .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+    .page { display: none; }
+    .page.active { display: grid; }
     .card { background: var(--card); border-radius: 22px; padding: 24px; min-width: 0; }
     .card h2 { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
     .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
@@ -369,39 +371,21 @@
       <input placeholder="Search..." oninput="sideSearch(this.value)" />
     </div>
     <nav>
-      <a class="nav-item active" href="#" onclick="navTo(event, this, 'top')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
-        <span class="side-label">대시보드</span>
+      <a class="nav-item" href="#labeling" data-page="labeling">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="13" height="12" rx="2"/><polygon points="16 10 21 7 21 17 16 14 16 10"/></svg>
+        <span class="side-label">영상 라벨링 · 승격</span>
       </a>
-      <a class="nav-item" href="#" onclick="navTo(event, this, 'dataSection')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
-        <span class="side-label">학습 데이터</span>
-        <svg class="nav-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/></svg>
+      <a class="nav-item" href="#phase-train" data-page="phase-train">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+        <span class="side-label">렙카운트 학습</span>
       </a>
-      <a class="nav-item" href="#" onclick="navTo(event, this, 'runsSection')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-        <span class="side-label">학습 이력</span>
-      </a>
-      <a class="nav-item" href="#" onclick="navTo(event, this, 'videoSection')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="13" height="12" rx="2"/><polygon points="16 10 21 7 21 17 16 14 16 10"/></svg>
-      <span class="side-label">영상 라벨링</span>
-    </a>
-    <a class="nav-item" href="#" onclick="navTo(event, this, 'phaseModelSection')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
-      <span class="side-label">렙카운팅 모델</span>
-    </a>
-    <a class="nav-item" href="#" onclick="navTo(event, this, 'progressCard')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
-        <span class="side-label">진행 상황</span>
-      </a>
-      <a class="nav-item" href="#" onclick="navTo(event, this, 'deploySection')">
+      <a class="nav-item" href="#phase-deploy" data-page="phase-deploy">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 19 6v6c0 5-3 8-7 10-4-2-7-5-7-10V6z"/></svg>
-        <span class="side-label">배포</span>
+        <span class="side-label">렙카운트 배포</span>
       </a>
-      <a class="nav-item" href="#" onclick="navTo(event, this, 'versionSection')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="19" x2="20" y2="19"/><rect x="5" y="11" width="3" height="8"/><rect x="10.5" y="6" width="3" height="13"/><rect x="16" y="14" width="3" height="5"/></svg>
-        <span class="side-label">버전 분포</span>
-        <svg class="nav-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/></svg>
+      <a class="nav-item" href="#classifier" data-page="classifier">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
+        <span class="side-label">분류기 학습 · 배포</span>
       </a>
       <a class="nav-item" href="#" id="navMlflow" target="_blank">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6H5V6h6"/><polyline points="14 3 21 3 21 10"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
@@ -416,7 +400,7 @@
           <span class="role-pill">Admin</span>
         </div>
       </div>
-      <a class="nav-item" href="#" onclick="navTo(event, this, 'settingsSection')">
+      <a class="nav-item" href="#classifier" onclick="setTimeout(() => document.getElementById('settingsSection').scrollIntoView({ behavior: 'smooth' }))">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
         <span class="side-label">Settings</span>
       </a>
@@ -431,7 +415,7 @@
   <!-- 메인 -->
   <main id="top">
     <div class="topbar">
-      <h1>대시보드</h1>
+      <h1 id="pageTitle">대시보드</h1>
       <div class="platform-tabs">
         <button class="active" onclick="setPlatform('ios')">iOS</button>
         <button onclick="setPlatform('android')">Android</button>
@@ -442,7 +426,7 @@
       </a>
     </div>
 
-    <div class="grid">
+    <div class="grid page" data-page="classifier">
 
       <!-- 1행: KPI ─────────────────────────────────────── -->
       <section class="card kpi">
@@ -512,61 +496,6 @@
         <div class="pagi" id="pagiBar"></div>
       </section>
 
-      <section class="card video-card" id="videoSection">
-        <div class="card-head" style="margin-bottom:14px">
-          <h2>영상 · 구간 라벨링</h2>
-          <span class="select-count" id="videoSelectCount">0개 선택됨</span>
-        </div>
-        <div class="table-toolbar">
-          <select class="status-filter" id="videoStatusFilter" onchange="renderVideos()">
-            <option value="">전체</option>
-          </select>
-          <select class="status-filter" id="videoClassFilter" onchange="renderVideos()">
-            <option value="">전체 종목</option>
-          </select>
-          <div class="search-box">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
-            <input id="videoSearch" placeholder="파일명 검색" oninput="renderVideos()" />
-          </div>
-          <button class="btn-label" id="labelBtn" onclick="startLabeling()" style="margin-left:auto" disabled>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><polyline points="20 6 9 17 4 12"/></svg>
-            선택 라벨링
-          </button>
-          <button class="btn-label promote" id="promoteBtn" onclick="promoteSelected()" disabled>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/></svg>
-            선택 승격
-          </button>
-          <button class="btn-blue" onclick="loadVideos()" style="margin-left:0">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2-9.4L23 10"/></svg>
-            새로고침
-          </button>
-        </div>
-        <div class="table-wrap">
-          <div id="videoList"><p class="empty">로딩 중...</p></div>
-        </div>
-      </section>
-
-      <section class="card table-card" id="phaseModelSection">
-        <div class="card-head" style="margin-bottom:14px">
-          <h2>렙카운팅 모델 · 종목별 0 1 2</h2>
-          <span class="select-count" id="phaseModelCount"></span>
-        </div>
-        <div class="table-toolbar">
-          <select class="status-filter" id="phaseTrainClass"></select>
-          <input class="status-filter" id="phaseTrainEpochs" type="number" value="20" min="1" max="500" style="width:90px" title="epochs" />
-          <input class="status-filter" id="phaseTrainLr" type="text" value="0.001" style="width:90px" title="learning rate" />
-          <button class="btn-label" id="phaseTrainBtn" onclick="startPhaseTraining()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            승격된 라벨 파일로 학습
-          </button>
-          <button class="btn-blue" onclick="loadPhaseModels()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2-9.4L23 10"/></svg>
-            새로고침
-          </button>
-        </div>
-        <div class="table-wrap"><div id="phaseModelList"><p class="empty">로딩 중...</p></div></div>
-      </section>
-
       <!-- 3행: 학습 이력(넓게) + 설정/배포 스택 ─────────── -->
       <section class="card runs-card" id="runsSection">
         <div class="card-head"><h2>학습 이력 · 배포</h2></div>
@@ -603,6 +532,78 @@
       </section>
 
 
+    </div>
+
+    <div class="grid page" data-page="labeling">
+      <section class="card video-card" id="videoSection">
+        <div class="card-head" style="margin-bottom:14px">
+          <h2>영상 · 구간 라벨링</h2>
+          <span class="select-count" id="videoSelectCount">0개 선택됨</span>
+        </div>
+        <div class="table-toolbar">
+          <select class="status-filter" id="videoStatusFilter" onchange="renderVideos()">
+            <option value="">전체</option>
+          </select>
+          <select class="status-filter" id="videoClassFilter" onchange="renderVideos()">
+            <option value="">전체 종목</option>
+          </select>
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+            <input id="videoSearch" placeholder="파일명 검색" oninput="renderVideos()" />
+          </div>
+          <button class="btn-label" id="labelBtn" onclick="startLabeling()" style="margin-left:auto" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><polyline points="20 6 9 17 4 12"/></svg>
+            선택 라벨링
+          </button>
+          <button class="btn-label promote" id="promoteBtn" onclick="promoteSelected()" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/></svg>
+            선택 승격
+          </button>
+          <button class="btn-blue" onclick="loadVideos()" style="margin-left:0">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2-9.4L23 10"/></svg>
+            새로고침
+          </button>
+        </div>
+        <div class="table-wrap">
+          <div id="videoList"><p class="empty">로딩 중...</p></div>
+        </div>
+      </section>
+
+    </div>
+
+    <div class="grid page" data-page="phase-train">
+      <section class="card table-card" id="phaseModelSection">
+        <div class="card-head" style="margin-bottom:14px">
+          <h2>렙카운팅 모델 · 종목별 0 1 2</h2>
+          <span class="select-count" id="phaseModelCount"></span>
+        </div>
+        <div class="table-toolbar">
+          <select class="status-filter" id="phaseTrainClass"></select>
+          <input class="status-filter" id="phaseTrainEpochs" type="number" value="20" min="1" max="500" style="width:90px" title="epochs" />
+          <input class="status-filter" id="phaseTrainLr" type="text" value="0.001" style="width:90px" title="learning rate" />
+          <button class="btn-label" id="phaseTrainBtn" onclick="startPhaseTraining()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            승격된 라벨 파일로 학습
+          </button>
+          <button class="btn-blue" onclick="loadPhaseModels()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2-9.4L23 10"/></svg>
+            새로고침
+          </button>
+        </div>
+        <div class="table-wrap"><div id="phaseModelList"><p class="empty">로딩 중...</p></div></div>
+      </section>
+
+    </div>
+
+    <div class="grid page" data-page="phase-deploy">
+      <section class="card table-card" id="phaseDeploySection">
+        <div class="card-head" style="margin-bottom:14px">
+          <h2>렙카운트 모델 배포 · 종목마다 한 버전</h2>
+          <span class="select-count" id="phaseDeployCount"></span>
+        </div>
+        <p class="modal-sub">완료된 버전을 골라 배포하면 같은 종목의 기존 배포가 교체된다. 이전 버전을 다시 배포하면 롤백이다. 앱은 GET /api/v1/{platform}/phase/models/deployed 로 종목별 배포 버전을 받는다.</p>
+        <div class="table-wrap"><div id="phaseDeployList"><p class="empty">로딩 중...</p></div></div>
+      </section>
     </div>
   </main>
 </div>
@@ -653,17 +654,20 @@ function toggleSidebar() {
   const c = document.getElementById('shell').classList.toggle('collapsed');
   document.getElementById('collapseBtn').textContent = c ? '>' : '<';
 }
-function navTo(event, el, id) {
-  event.preventDefault();
-  document.querySelectorAll('nav .nav-item').forEach(n => n.classList.remove('active'));
-  el.classList.add('active');
-  document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+const PAGES = { 'labeling': '영상 라벨링 · 승격', 'phase-train': '렙카운트 학습', 'phase-deploy': '렙카운트 배포', 'classifier': '분류기 학습 · 배포' };
+function route() {
+  const name = PAGES[location.hash.slice(1)] ? location.hash.slice(1) : 'labeling';
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.dataset.page === name));
+  document.querySelectorAll('nav .nav-item[data-page]').forEach(n => n.classList.toggle('active', n.dataset.page === name));
+  document.getElementById('pageTitle').textContent = PAGES[name];
 }
+window.addEventListener('hashchange', route);
+route();
 function sideSearch(q) {
   // 사이드바 검색 = 테이블 검색과 동일한 상태를 공유
   document.getElementById('searchInput').value = q;
   filterChanged();
-  if (q) document.getElementById('dataSection').scrollIntoView({ behavior: 'smooth' });
+  if (q) location.hash = 'classifier';
 }
 
 let platform = 'ios';
@@ -1240,6 +1244,7 @@ async function loadPhaseModels() {
     const { data } = await api('GET', '/phase/models');
     phaseModels = data.models;
     renderPhaseModels();
+    renderPhaseDeploy();
     if (phaseModels.some(m => m.status === 'training')) setTimeout(loadPhaseModels, 8000);
   } catch (e) { el.innerHTML = `<p class="empty" style="color:#DC2626">${e.message}</p>`; }
 }
@@ -1260,7 +1265,7 @@ function renderPhaseModels() {
           : '';
         return `<tr>
           <td><span class="pill class">${m.class}</span></td>
-          <td><b>${m.version}</b></td>
+          <td><b>${m.version}</b>${m.deployedAt ? ' <span class="pill labeled">배포 중</span>' : ''}</td>
           <td>${badge}</td>
           <td>${m.numFiles}</td>
           <td>${f.macroF1 ?? f.macro_f1 ?? '-'}</td>
@@ -1271,6 +1276,43 @@ function renderPhaseModels() {
         </tr>`;
       }).join('')}</tbody>
     </table>`;
+}
+
+function renderPhaseDeploy() {
+  const el = document.getElementById('phaseDeployList');
+  const byClass = {};
+  phaseModels.filter(m => m.canDownload).forEach(m => (byClass[m.class] ??= []).push(m));
+  const classes = Object.keys(byClass).sort();
+  document.getElementById('phaseDeployCount').textContent = `${classes.length}개 종목`;
+  if (!classes.length) { el.innerHTML = '<p class="empty">배포할 수 있는 완료 모델이 없습니다. 렙카운트 학습 페이지에서 먼저 학습하세요</p>'; return; }
+  el.innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>종목</th><th>배포 버전</th><th>배포 시각</th><th>버전 선택</th><th></th></tr></thead>
+      <tbody>${classes.map(c => {
+        const deployed = byClass[c].find(m => m.deployedAt);
+        const options = byClass[c].map(m => {
+          const f = m.metrics?.final ?? {};
+          return `<option value="${m.id}" ${m === (deployed ?? byClass[c][0]) ? 'selected' : ''}>${m.version} · F1 ${f.macroF1 ?? f.macro_f1 ?? '-'} · 렙 오차 ${f.countMae ?? f.count_mae ?? '-'}</option>`;
+        }).join('');
+        return `<tr>
+          <td><span class="pill class">${c}</span></td>
+          <td>${deployed ? `<b>${deployed.version}</b>` : '<span style="color:#9CA3AF">미배포</span>'}</td>
+          <td>${deployed ? fmtDate(deployed.deployedAt) : '-'}</td>
+          <td><select class="status-filter" id="deploySel_${c}">${options}</select></td>
+          <td><button class="btn-label" onclick="deployPhaseModel('${c}')">배포</button></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+async function deployPhaseModel(cls) {
+  const id = document.getElementById(`deploySel_${cls}`).value;
+  const m = phaseModels.find(x => String(x.id) === id);
+  if (!confirm(`${cls} ${m.version} 을 배포할까요? 기존 배포는 교체됩니다`)) return;
+  try {
+    await api('POST', `/phase/models/${id}/deploy`);
+    loadPhaseModels();
+  } catch (e) { alert(e.message); }
 }
 
 async function startPhaseTraining() {

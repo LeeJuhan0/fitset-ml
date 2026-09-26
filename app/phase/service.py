@@ -38,11 +38,13 @@ from app.phase.exceptions import (
 from app.data.exceptions import InvalidDeviceIdError, ReservationNotFoundError, UnsupportedClassError
 from app.exercises.repository import folder_for, is_class_known
 from app.motions.utils import load_motion
-from app.phase.models import CollectFileRead
+from app.phase.models import CollectFileRead, PhaseModelRead
 from app.phase.repository import (
     CONTENT_TYPES,
     confirm_collect,
     create_phase_model,
+    deploy_phase_model,
+    deployed_phase_models,
     get_file,
     get_phase_model,
     list_files,
@@ -247,3 +249,16 @@ async def model_download_url(s: AsyncSession, platform: str, model_id: int, fmt:
     if key is None:
         raise ModelArtifactNotFoundError()
     return ModelUrlResponse(model_id=model_id, format=fmt, url=presigned_get_url(model.bucket, key, GET_EXPIRES_SECONDS), expires_in=GET_EXPIRES_SECONDS)
+
+
+async def deploy_model(s: AsyncSession, platform: str, model_id: int) -> PhaseModelRead:
+    """렙카운팅 모델 배포, 롤백 겸용, 미완성이면 404"""
+    model = await get_phase_model(s, platform, model_id)
+    if model is None or not model.can_download:
+        raise ModelArtifactNotFoundError()
+    return await deploy_phase_model(s, platform, model_id)
+
+
+async def deployed_models(s: AsyncSession, platform: str) -> ListModelsResponse:
+    """종목별 배포된 렙카운팅 모델"""
+    return ListModelsResponse(platform=platform, models=await deployed_phase_models(s, platform))

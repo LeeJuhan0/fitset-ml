@@ -236,6 +236,24 @@ def test_models_list_and_download_url(admin_client, monkeypatch):
     assert admin_client.get("/api/v1/ios/phase/models/3/download-url?format=tflite").status_code == 400
 
 
+def test_deploy_requires_completed_model_and_lists_deployed(admin_client, monkeypatch):
+    done = PhaseModelRead(id=3, platform="ios", class_name="PUSHUP", version="v1.0", status="completed",
+                          bucket="fitset-phase-models", pt_key="k.pt", created_at="2026-09-22T03:00:00+00:00")
+    training = PhaseModelRead(id=4, platform="ios", class_name="PUSHUP", version="v1.1", status="training",
+                              bucket="fitset-phase-models", created_at="2026-09-22T03:00:00+00:00")
+    deployed = done.model_copy(update={"deployed_at": "2026-09-27T00:00:00+00:00"})
+    monkeypatch.setattr(phase_mod, "get_phase_model", async_(lambda s, p, i: {3: done, 4: training}.get(i)))
+    monkeypatch.setattr(phase_mod, "deploy_phase_model", async_(lambda s, p, i: deployed))
+    monkeypatch.setattr(phase_mod, "deployed_phase_models", async_(lambda s, p: [deployed]))
+
+    ok = admin_client.post("/api/v1/ios/phase/models/3/deploy")
+    assert ok.status_code == 200 and ok.json()["data"]["deployedAt"].startswith("2026-09-27")
+    assert admin_client.post("/api/v1/ios/phase/models/4/deploy").status_code == 404
+    assert admin_client.post("/api/v1/ios/phase/models/9/deploy").status_code == 404
+    listed = admin_client.get("/api/v1/ios/phase/models/deployed")
+    assert listed.status_code == 200 and listed.json()["data"]["models"][0]["version"] == "v1.0"
+
+
 def test_computed_flags_in_files_response(admin_client, monkeypatch):
     monkeypatch.setattr(phase_mod, "list_files", async_(lambda s, p: [
         _entry(),

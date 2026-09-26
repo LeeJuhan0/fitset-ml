@@ -227,6 +227,32 @@ async def get_phase_model(s: AsyncSession, platform: str, model_id: int) -> Phas
     return PhaseModelRead.from_row(row) if row is not None else None
 
 
+async def deploy_phase_model(s: AsyncSession, platform: str, model_id: int) -> PhaseModelRead | None:
+    """배포 표시, 같은 종목 기존 배포 해제"""
+    row = (await s.exec(select(PhaseModel).join(Platform).where(Platform.name == platform, PhaseModel.id == model_id))).first()
+    if row is None:
+        return None
+    others = (await s.exec(select(PhaseModel).where(
+        PhaseModel.platform_id == row.platform_id, PhaseModel.class_name == row.class_name,
+        PhaseModel.deployed_at.is_not(None), PhaseModel.id != row.id,
+    ))).all()
+    for other in others:
+        other.deployed_at = None
+        s.add(other)
+    row.deployed_at = utcnow()
+    s.add(row)
+    await s.flush()
+    return PhaseModelRead.from_row(row)
+
+
+async def deployed_phase_models(s: AsyncSession, platform: str) -> list[PhaseModelRead]:
+    """종목별 배포 모델, 종목순"""
+    rows = (await s.exec(
+        select(PhaseModel).join(Platform).where(Platform.name == platform, PhaseModel.deployed_at.is_not(None)).order_by(PhaseModel.class_name)
+    )).all()
+    return [PhaseModelRead.from_row(r) for r in rows]
+
+
 async def finish_phase_model(s: AsyncSession, model_id: int, *, keys: dict, metrics: dict, mlflow_run_id: str) -> None:
     """워커용 완료 처리, 산출물 키, 지표, completed"""
     row = await s.get(PhaseModel, model_id)
