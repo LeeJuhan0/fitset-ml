@@ -1,12 +1,11 @@
 from typing import Any, Optional
 
 from pydantic import AwareDatetime, computed_field
-from sqlalchemy import JSON, Text, UniqueConstraint
+from sqlalchemy import JSON, Double, Text, UniqueConstraint
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlmodel import Field, Relationship, SQLModel
-from sqlmodel.sql.sqltypes import UTCDateTime
 
-from app.core.models import CREATED_AT, ENTITY, UPDATED_AT, WIRE, Device, Exercise, Platform
+from app.core.models import CREATED_AT, ENTITY, UPDATED_AT, WIRE, Device, Exercise, Platform, UTCDateTime6
 from app.core.utils import utcnow
 from app.phase.enums import CollectStatus, PhaseModelStatus
 from app.data.models import DatasetFile, DatasetFileRead
@@ -20,7 +19,7 @@ class PhaseLabelBase(SQLModel):
     video_key: str = Field(max_length=256, description="{platform}/{index}_{class}/{stem}.mov")
     pose_key: str = Field(max_length=256, description="프레임별 관절 33개와 phase JSON")
     phase_summary: dict[str, Any] = Field(default_factory=dict, sa_type=JSON, description="frames, fps, detectedFraction, rowPhaseCounts")
-    labeled_at: AwareDatetime = Field(default_factory=utcnow, sa_type=UTCDateTime, description="라벨링 완료 시각")
+    labeled_at: AwareDatetime = Field(default_factory=utcnow, sa_type=UTCDateTime6, description="라벨링 완료 시각")
 
 
 class PhaseLabel(PhaseLabelBase, table=True):
@@ -70,11 +69,11 @@ class CollectFileBase(SQLModel):
     video_bucket: str = Field(max_length=64, description="영상 착지 버킷 fitset-collect-video")
     video_key: str = Field(max_length=256, description="{platform}/{index}_{class}/{stem}.mov")
     uploaded: bool = Field(default=False, description="CSV, 영상 두 PUT 완료 확정 여부")
-    video_start: float | None = Field(default=None, description="영상 첫 프레임 unix 초, IMU 행과 프레임 대응 기준")
+    video_start: float | None = Field(default=None, sa_type=Double, description="영상 첫 프레임 unix 초, IMU 행과 프레임 대응 기준")
     rows: int | None = Field(default=None, description="CSV 데이터 행 수")
     status: str = Field(default="pending", max_length=16, index=True, description="pending, labeling, labeled, failed")
     error: str | None = Field(default=None, sa_type=Text, description="워커 실패 사유")
-    promoted_at: AwareDatetime | None = Field(default=None, sa_type=UTCDateTime, description="dataset_files 승격 시각")
+    promoted_at: AwareDatetime | None = Field(default=None, sa_type=UTCDateTime6, description="dataset_files 승격 시각")
 
     @hybrid_property
     def is_labeling(self) -> bool:
@@ -201,12 +200,12 @@ class PhaseModelBase(SQLModel):
     window: int = Field(default=50, description="입력 윈도우 행 수, 0.5초")
     stride: int = Field(default=5, description="학습 윈도우 stride 행 수")
     epochs: int = Field(default=20)
-    lr: float = Field(default=0.001, description="학습률")
+    lr: float = Field(default=0.001, sa_type=Double, description="학습률")
     num_files: int = Field(default=0, description="학습에 쓴 dataset_files 수")
     metrics: dict[str, Any] = Field(default_factory=dict, sa_type=JSON, description="acc, f1, macro_f1, count_mae, per_file")
     mlflow_run_id: str | None = Field(default=None, max_length=64)
     error: str | None = Field(default=None, sa_type=Text, description="워커 실패 사유")
-    deployed_at: AwareDatetime | None = Field(default=None, sa_type=UTCDateTime, description="배포 시각, 종목마다 하나만 값 있음")
+    deployed_at: AwareDatetime | None = Field(default=None, sa_type=UTCDateTime6, description="배포 시각, 종목마다 하나만 값 있음")
 
     @hybrid_property
     def is_training(self) -> bool:

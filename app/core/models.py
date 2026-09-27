@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Optional
 
 from pydantic import AwareDatetime, ConfigDict
 from sqlalchemy import UniqueConstraint, func
+from sqlalchemy.dialects import mysql
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlmodel import Field, Relationship, SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -17,13 +18,26 @@ if TYPE_CHECKING:
 ENTITY = ConfigDict(ignored_types=(hybrid_property,))
 WIRE = ConfigDict(alias_generator=wire_alias, populate_by_name=True, ignored_types=(hybrid_property,))
 
+
+
+class UTCDateTime6(UTCDateTime):
+    """UTC 시각, MySQL 은 마이크로초 DATETIME(6)"""
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        """MySQL 만 DATETIME(6)"""
+        if dialect.name == "mysql":
+            return dialect.type_descriptor(mysql.DATETIME(fsp=6))
+        return super().load_dialect_impl(dialect)
+
+
 CREATED_AT = dict(
-    default=None, nullable=False, sa_type=UTCDateTime,
-    sa_column_kwargs={"server_default": func.now()},
+    default=None, nullable=False, sa_type=UTCDateTime6,
+    sa_column_kwargs={"server_default": func.now(6)},
 )
 UPDATED_AT = dict(
-    default=None, nullable=False, sa_type=UTCDateTime,
-    sa_column_kwargs={"server_default": func.now(), "onupdate": utcnow},
+    default=None, nullable=False, sa_type=UTCDateTime6,
+    sa_column_kwargs={"server_default": func.now(6), "onupdate": utcnow},
 )
 
 

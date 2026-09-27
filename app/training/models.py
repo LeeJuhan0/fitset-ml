@@ -1,9 +1,8 @@
 from pydantic import AwareDatetime
-from sqlalchemy import Text
+from sqlalchemy import Double, Text
 from sqlmodel import Field, Relationship, SQLModel
-from sqlmodel.sql.sqltypes import UTCDateTime
 
-from app.core.models import CREATED_AT, UPDATED_AT, Platform
+from app.core.models import CREATED_AT, UPDATED_AT, Platform, UTCDateTime6
 
 
 class TrainingRun(SQLModel, table=True):
@@ -15,10 +14,10 @@ class TrainingRun(SQLModel, table=True):
     version: str = Field(max_length=32)
     status: str = Field(default="running", max_length=16, index=True, description="running, completed, failed")
     epochs: int
-    lr: float
+    lr: float = Field(sa_type=Double)
     num_files: int
     error: str | None = Field(default=None, sa_type=Text, description="실패 사유, 종료 코드와 로그 끝부분")
-    finished_at: AwareDatetime | None = Field(default=None, sa_type=UTCDateTime)
+    finished_at: AwareDatetime | None = Field(default=None, sa_type=UTCDateTime6)
 
     platform_id: int = Field(foreign_key="platforms.id", index=True)
     platform: Platform = Relationship(sa_relationship_kwargs={"lazy": "joined"})
