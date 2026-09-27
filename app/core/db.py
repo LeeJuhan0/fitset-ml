@@ -1,4 +1,5 @@
 import asyncio
+import atexit
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -11,6 +12,7 @@ DSN = settings.database_url  # alembic env.py 용, 앱 엔진은 호출 시점 s
 
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker | None = None
+_loop: asyncio.AbstractEventLoop | None = None
 
 
 def register_models() -> None:
@@ -53,7 +55,7 @@ def reset() -> None:
     """엔진·팩토리 폐기, 테스트 URL 교체용"""
     global _engine, _session_factory
     if _engine is not None:
-        asyncio.run(_engine.dispose())
+        run(_engine.dispose())
     _engine = None
     _session_factory = None
 
@@ -71,5 +73,15 @@ async def session() -> AsyncIterator[AsyncSession]:
 
 
 def run(coro):
-    """워커·스크립트용, 이벤트 루프 없이 코루틴 실행"""
-    return asyncio.run(coro)
+    """워커·스크립트용, 프로세스 단일 루프, 풀 커넥션이 루프에 묶임"""
+    global _loop
+    if _loop is None or _loop.is_closed():
+        _loop = asyncio.new_event_loop()
+        atexit.register(_dispose_at_exit)
+    return _loop.run_until_complete(coro)
+
+
+def _dispose_at_exit() -> None:
+    """종료 시 같은 루프에서 풀 정리"""
+    if _engine is not None and _loop is not None and not _loop.is_closed():
+        _loop.run_until_complete(_engine.dispose())
