@@ -223,3 +223,9 @@ def test_model_classes_follow_master_index(fresh_db):
     names = CLASSES + ["BAND_CURL", "BOX_JUMP", "MACHINE_CHEST_PRESS", "WALL_SIT"]
     run(ex_repo.upsert_exercises, [{"index": i, "class": c, "slug": c.lower(), "name": c} for i, c in enumerate(names)])
     assert run(data_repo.model_classes) == names
+
+
+def test_timestamps_set_before_insert():
+    from app.core.models import Platform
+    row = Platform(name="ios")
+    assert row.created_at is not None

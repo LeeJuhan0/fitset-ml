@@ -32,11 +32,11 @@ class UTCDateTime6(UTCDateTime):
 
 
 CREATED_AT = dict(
-    default=None, nullable=False, sa_type=UTCDateTime6,
+    default_factory=utcnow, nullable=False, sa_type=UTCDateTime6,
     sa_column_kwargs={"server_default": func.now(6)},
 )
 UPDATED_AT = dict(
-    default=None, nullable=False, sa_type=UTCDateTime6,
+    default_factory=utcnow, nullable=False, sa_type=UTCDateTime6,
     sa_column_kwargs={"server_default": func.now(6), "onupdate": utcnow},
 )
 
