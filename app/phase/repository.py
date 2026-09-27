@@ -7,6 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core import s3
 from app.core.models import Platform, ensure_device, ensure_platform, find_exercise
 from app.data.repository import dataset_locations  # noqa: F401
+from app.deployment.repository import add_deployment
 from app.exercises.repository import folder_for
 from app.data.models import DatasetFile, DatasetFileRead
 from app.phase import utils
@@ -276,7 +277,10 @@ async def deploy_phase_model(s: AsyncSession, platform: str, model_id: int) -> P
         s.add(other)
     row.deployed_at = utcnow()
     s.add(row)
-    await s.flush()
+    await add_deployment(
+        s, platform, kind="phase", class_name=row.class_name, version=row.version, bucket=row.bucket,
+        model_key=row.mlpackage_key if platform == "ios" else row.onnx_key, meta_key=row.meta_key,
+    )
     return PhaseModelRead.from_row(row)
 
 

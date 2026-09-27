@@ -325,9 +325,11 @@ async def model_download_url(s: AsyncSession, platform: str, model_id: int, fmt:
 
 
 async def deploy_model(s: AsyncSession, platform: str, model_id: int) -> PhaseModelRead:
-    """렙카운팅 모델 배포, 롤백 겸용, 미완성이면 404"""
+    """렙카운팅 모델 배포, 롤백 겸용, 미완성이나 플랫폼 파일 없으면 404"""
     model = await get_phase_model(s, platform, model_id)
     if model is None or not model.can_download:
+        raise ModelArtifactNotFoundError()
+    if (model.mlpackage_key if platform == "ios" else model.onnx_key) is None:
         raise ModelArtifactNotFoundError()
     return await deploy_phase_model(s, platform, model_id)
 

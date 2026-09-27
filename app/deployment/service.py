@@ -2,8 +2,11 @@ import time
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.deployment.schemas import (
     DeployResponse,
+    InternalModelsResponse,
     ModelLatestResponse,
     VersionStatItem,
     VersionStatsResponse,
@@ -13,8 +16,10 @@ from app.deployment.exceptions import NoDeployedModelError, NoTrainingHistoryErr
 from app.core.config import settings
 from app.deployment import utils
 from app.deployment.repository import (
+    add_deployment,
     generate_presigned_model_download_url,
     get_latest,
+    latest_deployments,
     put_latest,
 )
 
@@ -29,8 +34,8 @@ def _prune(platform: str):
         q.popleft()
 
 
-def deploy(platform: str, version: str) -> DeployResponse:
-    """지정 버전 latest.json 기록, 롤백 겸용"""
+async def deploy(s: AsyncSession, platform: str, version: str) -> DeployResponse:
+    """지정 버전 latest.json, 배포 이력 기록, 롤백 겸용"""
     import mlflow
 
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
@@ -49,12 +54,15 @@ def deploy(platform: str, version: str) -> DeployResponse:
 
     run = runs[0]
     deployed_at = datetime.now(timezone.utc).isoformat()
+    model_url = utils.model_url(platform, version)
     put_latest(platform, {
         "version": version,
-        "modelUrl": utils.model_url(platform, version),
+        "modelUrl": model_url,
         "deployedAt": deployed_at,
         "mlflowRunId": run.info.run_id,
     })
+    bucket, key = model_url.removeprefix("s3://").split("/", 1)
+    await add_deployment(s, platform, kind="classifier", version=version, bucket=bucket, model_key=key)
 
     return DeployResponse(
         deployed_version=version,
@@ -98,4 +106,15 @@ def version_stats(platform: str) -> VersionStatsResponse:
             VersionStatItem(version=v, count=c, ratio=round(c / total, 2))
             for v, c in counts.most_common()
         ],
+    )
+
+
+async def internal_latest(s: AsyncSession, platform: str) -> InternalModelsResponse:
+    """백엔드용 분류, 종목별 렙카운팅 최신 배포"""
+    rows = await latest_deployments(s, platform)
+    classifier = next((r for r in rows if r.kind == "classifier"), None)
+    phases = sorted((r for r in rows if r.kind == "phase"), key=lambda r: r.class_name)
+    return InternalModelsResponse(
+        classifier=utils.internal_item(classifier, settings.class_mapping_url) if classifier else None,
+        phase_models=[utils.internal_phase_item(r) for r in phases],
     )

@@ -15,7 +15,7 @@ class DatasetFileBase(SQLModel):
     filename: str = Field(max_length=128, description="{CLASS}_{deviceId}_{NNNN}.csv 또는 .parquet")
     class_name: str = Field(max_length=64, index=True, description="운동 종목 라벨, CLASSES 원소")
     bucket: str = Field(max_length=64, description="실물 버킷 fitset-dataset")
-    s3_key: str = Field(max_length=256, description="{platform}/raw/{index}_{class}/{filename}, 구 데이터는 raw/{class}"),
+    s3_key: str = Field(max_length=256, description="{platform}/raw/{index}_{class}/{filename}, 구 데이터는 raw/{class}")
     uploaded: bool = Field(default=False, description="presigned PUT 완료 확정 여부")
     phase_labeled: bool = Field(default=False, description="phase 열 보유, 렙카운팅 모델 학습 후보")
     trained_in_version: str | None = Field(default=None, max_length=32, description="마지막으로 분류 학습에 쓰인 모델 버전")

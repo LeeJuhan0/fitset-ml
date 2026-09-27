@@ -8,7 +8,7 @@ from app.core.exception_register import ERROR_DOC, register_exception_handlers
 from app.core.logging import configure_logging, register_trace_middleware
 from app.core.security import register_static_basic_guard
 from app.data.router import admin_router as data_router
-from app.deployment.router import admin_router as deploy_router
+from app.deployment.router import admin_router as deploy_router, internal_router
 from app.exercises.router import router as exercises_router
 from app.mlflow_proxy import router as mlflow_proxy_router
 from app.phase.router import router as phase_router
@@ -20,6 +20,7 @@ OPENAPI_TAGS = [
     {"name": "phase", "description": "수집앱 IMU+영상 업로드, 구간 라벨링, 승격, 종목별 렙카운팅 모델"},
     {"name": "training", "description": "분류 모델 학습 시작, 진행 상태, MLflow 이력"},
     {"name": "deployment", "description": "분류 모델 배포, latest 조회, 버전 분포"},
+    {"name": "internal", "description": "스프링 백엔드 전용, 최신 배포 모델 조회"},
     {"name": "health", "description": "헬스체크"},
 ]
 
@@ -45,6 +46,7 @@ app.include_router(data_router, prefix="/api/v1", responses=ERROR_DOC)
 app.include_router(phase_router, prefix="/api/v1", responses=ERROR_DOC)
 app.include_router(train_router, prefix="/api/v1", responses=ERROR_DOC)
 app.include_router(deploy_router, prefix="/api/v1", responses=ERROR_DOC)
+app.include_router(internal_router, prefix="/api/v1", responses=ERROR_DOC)
 app.include_router(mlflow_proxy_router)
 
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

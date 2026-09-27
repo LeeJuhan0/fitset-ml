@@ -2,8 +2,12 @@ import json
 import time
 
 from botocore.exceptions import ClientError
+from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core import s3
+from app.core.models import Platform, ensure_platform
+from app.deployment.models import ModelDeployment
 
 _LATEST_TTL_SECONDS = 60
 _latest_cache: dict[str, tuple[float, dict | None]] = {}
@@ -51,3 +55,22 @@ def generate_presigned_model_download_url(model_url: str, expires: int = 3600) -
         Params={"Bucket": bucket, "Key": key},
         ExpiresIn=expires,
     )
+
+
+async def add_deployment(s: AsyncSession, platform: str, **fields) -> None:
+    """배포 이력 한 행 기록"""
+    row = ModelDeployment(platform=await ensure_platform(s, platform), **fields)
+    s.add(row)
+    await s.flush()
+
+
+async def latest_deployments(s: AsyncSession, platform: str) -> list[ModelDeployment]:
+    """종류와 종목별 가장 최근 배포 행"""
+    rows = (await s.exec(
+        select(ModelDeployment).join(Platform).where(Platform.name == platform)
+        .order_by(col(ModelDeployment.created_at).desc(), col(ModelDeployment.id).desc())
+    )).all()
+    latest: dict[tuple, ModelDeployment] = {}
+    for r in rows:
+        latest.setdefault((r.kind, r.class_name), r)
+    return list(latest.values())

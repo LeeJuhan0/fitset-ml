@@ -240,7 +240,8 @@ def test_models_list_and_download_url(admin_client, monkeypatch):
 
 def test_deploy_requires_completed_model_and_lists_deployed(admin_client, monkeypatch):
     done = PhaseModelRead(id=3, platform="ios", class_name="PUSHUP", version="v1.0", status="completed",
-                          bucket="fitset-phase-models", pt_key="k.pt", created_at="2026-09-22T03:00:00+00:00")
+                          bucket="fitset-phase-models", pt_key="k.pt", mlpackage_key="k.mlpackage.zip",
+                          created_at="2026-09-22T03:00:00+00:00")
     training = PhaseModelRead(id=4, platform="ios", class_name="PUSHUP", version="v1.1", status="training",
                               bucket="fitset-phase-models", created_at="2026-09-22T03:00:00+00:00")
     deployed = done.model_copy(update={"deployed_at": "2026-09-27T00:00:00+00:00"})

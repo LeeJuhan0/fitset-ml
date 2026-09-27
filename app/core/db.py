@@ -17,6 +17,7 @@ def register_models() -> None:
     """엔티티 모듈 import, 문자열 관계 해석용"""
     from app.core import models
     from app.data import models as data_models
+    from app.deployment import models as deployment_models
     from app.phase import models as phase_models
 
 
