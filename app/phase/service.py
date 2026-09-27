@@ -116,14 +116,29 @@ def _delete_objects(objects: list[tuple[str, str]]) -> None:
         s3.delete_object(bucket, key)
 
 
-def _copy_originals(entry: CollectFileRead, csv_key: str, video_key: str) -> None:
-    """원본 CSV 영상을 새 키로 복사"""
-    s3.copy_object(entry.csv_bucket, entry.csv_key, entry.csv_bucket, csv_key)
-    s3.copy_object(entry.video_bucket, entry.video_key, entry.video_bucket, video_key)
+def _rewrite_originals(entry: CollectFileRead, class_name: str, csv_key: str, video_key: str) -> None:
+    """새 키에 label 열 바꾼 CSV와 영상, 라벨 후엔 labeled 객체에서 복원"""
+    import pandas as pd
+
+    with tempfile.TemporaryDirectory() as workdir:
+        src = pathlib.Path(workdir) / "src"
+        if entry.label is not None:
+            s3.download_object(entry.label.data_bucket, entry.label.data_key, str(src))
+            df = pd.read_parquet(src).drop(columns=["phase"], errors="ignore")
+        if entry.label is None:
+            s3.download_object(entry.csv_bucket, entry.csv_key, str(src))
+            df = pd.read_csv(src)
+        df.columns = df.columns.str.strip()
+        df["label"] = class_name
+        out = pathlib.Path(workdir) / "out.csv"
+        df.to_csv(out, index=False)
+        s3.upload_object(entry.csv_bucket, csv_key, str(out), CONTENT_TYPES["csv"])
+    bucket, key = _video_location(entry)
+    s3.copy_object(bucket, key, entry.video_bucket, video_key)
 
 
 async def change_class(s: AsyncSession, platform: str, filename: str, class_name: str) -> CollectFileRead:
-    """종목 변경, 새 키로 복사 후 행 갱신, 옛 객체와 라벨 삭제, 승격 후 409"""
+    """종목 변경, label 열 바꿔 새 키에 쓰고 행 갱신, 옛 객체와 라벨 삭제, 승격 후 409"""
     entry = await get_file(s, platform, filename)
     if entry is None:
         raise CollectFileNotFoundError(filename)
@@ -135,7 +150,7 @@ async def change_class(s: AsyncSession, platform: str, filename: str, class_name
     if entry.class_name == class_name:
         return entry
     changed = await change_collect_class(s, platform, filename, class_name)
-    await asyncio.to_thread(_copy_originals, entry, changed.csv_key, changed.video_key)
+    await asyncio.to_thread(_rewrite_originals, entry, class_name, changed.csv_key, changed.video_key)
     await s.commit()
     # ponytail: 옛 객체 삭제 실패는 고아 객체로 남음, 잦으면 정리 배치
     await asyncio.to_thread(_delete_objects, [(entry.csv_bucket, entry.csv_key), (entry.video_bucket, entry.video_key), *_label_objects(entry)])

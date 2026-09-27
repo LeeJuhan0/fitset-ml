@@ -1,3 +1,5 @@
+import io
+import pathlib
 from types import SimpleNamespace
 
 from conftest import async_
@@ -305,26 +307,51 @@ def test_delete_removes_objects_and_row(admin_client, monkeypatch):
     assert removed == ["PUSHUP_DEV1_0001.csv"]
 
 
-def test_change_class_copies_and_blocks_after_promotion(admin_client, monkeypatch):
+def test_change_class_rewrites_label_and_blocks_after_promotion(admin_client, monkeypatch, tmp_path):
+    import pandas as pd
+
+    labeled = PhaseLabelRead(data_bucket="fitset-collect-labeled", data_key="ios/PUSHUP/PUSHUP_DEV1_0004.parquet",
+                             video_bucket="fitset-collect-labeled", video_key="ios/PUSHUP/PUSHUP_DEV1_0004.mov", pose_key="p",
+                             phase_summary={}, labeled_at="2026-09-22T01:00:00+00:00")
     promoted = _entry("PUSHUP_DEV1_0002.csv")
     promoted.dataset_file = _dataset()
     files = {"PUSHUP_DEV1_0001.csv": _entry(), "PUSHUP_DEV1_0002.csv": promoted,
-             "PUSHUP_DEV1_0003.csv": _entry("PUSHUP_DEV1_0003.csv", status="labeling")}
+             "PUSHUP_DEV1_0003.csv": _entry("PUSHUP_DEV1_0003.csv", status="labeling"),
+             "PUSHUP_DEV1_0004.csv": _entry("PUSHUP_DEV1_0004.csv", status="labeled", label=labeled)}
+    table = pd.DataFrame({"timestamp": [1.5, 1.51], "ax": [0.1, 0.2], "label": ["PUSHUP", "PUSHUP"]})
+    store = {("fitset-collect-imu", "ios/PUSHUP/PUSHUP_DEV1_0001.csv"): table.to_csv(index=False).encode(),
+             ("fitset-collect-labeled", "ios/PUSHUP/PUSHUP_DEV1_0004.parquet"): table.assign(phase=[0, 1]).to_parquet(index=False)}
     copied, deleted = [], []
+
+    def download(b, k, path):
+        pathlib.Path(path).write_bytes(store[(b, k)])
+
+    def upload(b, k, path, ct):
+        store[(b, k)] = pathlib.Path(path).read_bytes()
+
     monkeypatch.setattr(phase_mod, "get_file", async_(lambda s, p, f: files.get(f)))
-    monkeypatch.setattr(phase_mod, "change_collect_class", async_(lambda s, p, f, c: _entry("SQUAT_DEV1_0001.csv", "SQUAT")))
-    monkeypatch.setattr(phase_mod.s3, "copy_object", lambda b, k, db, dk: copied.append((k, dk)))
-    monkeypatch.setattr(phase_mod.s3, "delete_object", lambda b, k: deleted.append(k))
+    monkeypatch.setattr(phase_mod, "change_collect_class", async_(lambda s, p, f, c: _entry(f.replace("PUSHUP", "SQUAT"), "SQUAT")))
+    monkeypatch.setattr(phase_mod.s3, "download_object", download)
+    monkeypatch.setattr(phase_mod.s3, "upload_object", upload)
+    monkeypatch.setattr(phase_mod.s3, "copy_object", lambda b, k, db, dk: copied.append((b, k, dk)))
+    monkeypatch.setattr(phase_mod.s3, "delete_object", lambda b, k: deleted.append((b, k)))
+    patch = lambda f, c="SQUAT": admin_client.patch("/api/v1/ios/phase/files/class", json={"filename": f, "class": c})
 
-    resp = admin_client.patch("/api/v1/ios/phase/files/class", json={"filename": "PUSHUP_DEV1_0001.csv", "class": "SQUAT"})
+    resp = patch("PUSHUP_DEV1_0001.csv")
     assert resp.status_code == 200 and resp.json()["data"]["filename"] == "SQUAT_DEV1_0001.csv"
-    assert copied == [("ios/PUSHUP/PUSHUP_DEV1_0001.csv", "ios/SQUAT/SQUAT_DEV1_0001.csv"),
-                      ("ios/PUSHUP/PUSHUP_DEV1_0001.mov", "ios/SQUAT/SQUAT_DEV1_0001.mov")]
-    assert deleted == ["ios/PUSHUP/PUSHUP_DEV1_0001.csv", "ios/PUSHUP/PUSHUP_DEV1_0001.mov"]
+    out = pd.read_csv(io.BytesIO(store[("fitset-collect-imu", "ios/SQUAT/SQUAT_DEV1_0001.csv")]))
+    assert list(out["label"]) == ["SQUAT", "SQUAT"] and list(out["ax"]) == [0.1, 0.2]
+    assert copied == [("fitset-collect-video", "ios/PUSHUP/PUSHUP_DEV1_0001.mov", "ios/SQUAT/SQUAT_DEV1_0001.mov")]
+    assert ("fitset-collect-imu", "ios/PUSHUP/PUSHUP_DEV1_0001.csv") in deleted
 
-    patch = lambda f, c="SQUAT": admin_client.patch("/api/v1/ios/phase/files/class", json={"filename": f, "class": c}).status_code
-    assert patch("PUSHUP_DEV1_0002.csv") == 409
-    assert patch("PUSHUP_DEV1_0003.csv") == 409
-    assert patch("nope.csv") == 404
-    assert patch("PUSHUP_DEV1_0001.csv", "PLANK") == 400
+    assert patch("PUSHUP_DEV1_0004.csv").status_code == 200
+    out = pd.read_csv(io.BytesIO(store[("fitset-collect-imu", "ios/SQUAT/SQUAT_DEV1_0004.csv")]))
+    assert "phase" not in out.columns and set(out["label"]) == {"SQUAT"}
+    assert copied[-1] == ("fitset-collect-labeled", "ios/PUSHUP/PUSHUP_DEV1_0004.mov", "ios/SQUAT/SQUAT_DEV1_0004.mov")
+    assert ("fitset-collect-labeled", "p") in deleted
+
+    assert patch("PUSHUP_DEV1_0002.csv").status_code == 409
+    assert patch("PUSHUP_DEV1_0003.csv").status_code == 409
+    assert patch("nope.csv").status_code == 404
+    assert patch("PUSHUP_DEV1_0001.csv", "PLANK").status_code == 400
     assert len(copied) == 2
