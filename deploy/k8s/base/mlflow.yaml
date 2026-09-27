@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fitset-mlflow
+spec:
+  replicas: 1
+  # 시작할 때 db upgrade 로 RDS 스키마를 올린다. 옛 버전과 새 버전이 같이 떠 있으면 옛 쪽이 깨진다.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: fitset-mlflow
+  template:
+    metadata:
+      labels:
+        app: fitset-mlflow
+        tags.datadoghq.com/service: fitset-mlflow
+    spec:
+      serviceAccountName: fitset-ml
+      initContainers:
+        # 이미지가 mlflow 버전을 고정하지 않는다. 스키마가 어긋나면 모든 조회가 500 이 되므로 먼저 맞춘다.
+        - name: db-upgrade
+          image: fitset-mlflow
+          command: ["mlflow", "db", "upgrade", "$(MLFLOW_BACKEND_STORE_URI)"]
+          env:
+            - name: MLFLOW_BACKEND_STORE_URI
+              valueFrom:
+                secretKeyRef:
+                  name: fitset-ml
+                  key: MLFLOW_BACKEND_URI
+      containers:
+        - name: mlflow
+          image: fitset-mlflow
+          command: ["mlflow", "server"]
+          args:
+            - --default-artifact-root=s3://fitset-models/mlflow
+            - --host=0.0.0.0
+            - --port=5001
+            - --static-prefix=/mlflow
+            # 기본 워커 4개가 유휴 상태에서도 2GiB 를 먹는다. 사용자는 대시보드 프록시 하나뿐이다.
+            - --workers=2
+            - --allowed-hosts=fitset-mlflow:5001,localhost:5001,127.0.0.1:5001,$(ML_HOST)
+            - --cors-allowed-origins=https://$(ML_HOST)
+          ports:
+            - name: http
+              containerPort: 5001
+          env:
+            # 인자로 넘기면 비밀번호가 프로세스 명령줄에 그대로 보인다. mlflow server 는 이 환경변수를 읽는다.
+            - name: MLFLOW_BACKEND_STORE_URI
+              valueFrom:
+                secretKeyRef:
+                  name: fitset-ml
+                  key: MLFLOW_BACKEND_URI
+            # 서버 쪽 작업 실행기(huey consumer 4개 + job runner)가 쓰지 않는 기능에 1GiB 넘게 잡는다.
+            - name: MLFLOW_SERVER_ENABLE_JOB_EXECUTION
+              value: "false"
+            - name: AWS_REGION
+              value: ap-northeast-2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 1536Mi
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fitset-mlflow
+spec:
+  selector:
+    app: fitset-mlflow
+  ports:
+    - name: http
+      port: 5001
+      targetPort: http

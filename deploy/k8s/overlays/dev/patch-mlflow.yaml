@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fitset-mlflow
+spec:
+  template:
+    metadata:
+      labels:
+        tags.datadoghq.com/env: dev
+        tags.datadoghq.com/version: IMAGE_TAG
+    spec:
+      nodeSelector:
+        pool: ml
+      tolerations:
+        - key: workload
+          value: ml
+          effect: NoSchedule
+      containers:
+        - name: mlflow
+          env:
+            - name: ML_HOST
+              value: ml-dev.fitset.kro.kr

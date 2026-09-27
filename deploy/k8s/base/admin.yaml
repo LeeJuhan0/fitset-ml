@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fitset-ml-admin
+spec:
+  replicas: 1
+  # 학습·라벨링 프로세스 핸들을 메모리에 들고 있다. 파드가 둘이면 서로의 학습을 죽은 것으로 기록한다.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: fitset-ml-admin
+  template:
+    metadata:
+      labels:
+        app: fitset-ml-admin
+        tags.datadoghq.com/service: fitset-ml-admin
+    spec:
+      serviceAccountName: fitset-ml
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: admin
+          image: fitset-ml-admin-api
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: http://fitset-mlflow:5001/mlflow
+            - name: MLFLOW_PROXY_TARGET
+              value: http://fitset-mlflow:5001
+            - name: MLFLOW_UI_USER
+              valueFrom:
+                secretKeyRef:
+                  name: fitset-ml
+                  key: MLFLOW_UI_USER
+            - name: MLFLOW_UI_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fitset-ml
+                  key: MLFLOW_UI_PASSWORD
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: fitset-ml
+                  key: DATABASE_URL
+            - name: RAW_DATA_BUCKET
+              value: fitset-dataset
+            - name: MODELS_BUCKET
+              value: fitset-models
+            - name: COLLECT_IMU_BUCKET
+              value: fitset-collect-imu
+            - name: COLLECT_VIDEO_BUCKET
+              value: fitset-collect-video
+            - name: COLLECT_LABELED_BUCKET
+              value: fitset-collect-labeled
+            - name: PHASE_MODELS_BUCKET
+              value: fitset-phase-models
+            - name: AWS_REGION
+              value: ap-northeast-2
+          # 학습·라벨링이 같은 파드 안 subprocess 로 돈다. 한도가 곧 동시에 돌릴 수 있는 학습의 상한이다.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              memory: 5Gi
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fitset-ml-admin
+spec:
+  selector:
+    app: fitset-ml-admin
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
