@@ -9,6 +9,7 @@ from app.deps import DbSessionDep, get_trace_id, validate_platform
 from app.phase import service
 from app.phase.models import PhaseModelRead
 from app.phase.schemas import (
+    DeleteFileResponse,
     LabelResponse,
     LabelRequest,
     ListFilesResponse,
@@ -60,6 +61,17 @@ async def list_files(
 ):
     """목록 목록, 상태별 개수"""
     return ApiResponse(trace_id=trace_id, data=await service.files(session, platform))
+
+
+@router.delete("/{platform}/phase/files", response_model=ApiResponse[DeleteFileResponse])
+async def delete_file(
+    session: DbSessionDep,
+    query: Annotated[FilenameRequest, Query()],
+    platform: str = Depends(validate_platform),
+    trace_id: str = Depends(get_trace_id),
+):
+    """수집 파일 삭제, S3 객체와 목록 행"""
+    return ApiResponse(trace_id=trace_id, data=await service.delete_file(session, platform, query.filename))
 
 
 @router.post("/{platform}/phase/label", response_model=ApiResponse[LabelResponse], status_code=202)

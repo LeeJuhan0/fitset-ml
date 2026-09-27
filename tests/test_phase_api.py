@@ -283,3 +283,23 @@ def test_label_rep_count_estimate_from_summary(admin_client, monkeypatch):
     monkeypatch.setattr(phase_mod, "list_files", async_(lambda s, p: [_entry(status="labeled", label=label), _entry(status="labeled", label=_label())]))
     files = admin_client.get("/api/v1/ios/phase/files").json()["data"]["files"]
     assert files[0]["label"]["repCountEstimate"] == 14 and files[1]["label"]["repCountEstimate"] is None
+
+
+def test_delete_removes_objects_and_row(admin_client, monkeypatch):
+    label = PhaseLabelRead(data_bucket="fitset-collect-labeled", data_key="d", video_bucket="fitset-collect-labeled",
+                           video_key="v", pose_key="p", phase_summary={}, labeled_at="2026-09-22T01:00:00+00:00")
+    files = {"PUSHUP_DEV1_0001.csv": _entry(status="labeled", label=label), "PUSHUP_DEV1_0002.csv": _entry("PUSHUP_DEV1_0002.csv", status="labeling")}
+    deleted, removed = [], []
+    monkeypatch.setattr(phase_mod, "get_file", async_(lambda s, p, f: files.get(f)))
+    monkeypatch.setattr(phase_mod.s3, "delete_object", lambda b, k: deleted.append((b, k)))
+    monkeypatch.setattr(phase_mod, "delete_collect", async_(lambda s, p, f: removed.append(f)))
+
+    resp = admin_client.delete("/api/v1/ios/phase/files?filename=PUSHUP_DEV1_0001.csv")
+    assert resp.status_code == 200
+    assert removed == ["PUSHUP_DEV1_0001.csv"]
+    assert ("fitset-collect-imu", "ios/PUSHUP/PUSHUP_DEV1_0001.csv") in deleted
+    assert ("fitset-collect-labeled", "p") in deleted and len(deleted) == 5
+
+    assert admin_client.delete("/api/v1/ios/phase/files?filename=PUSHUP_DEV1_0002.csv").status_code == 409
+    assert admin_client.delete("/api/v1/ios/phase/files?filename=nope.csv").status_code == 404
+    assert removed == ["PUSHUP_DEV1_0001.csv"]

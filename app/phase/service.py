@@ -9,6 +9,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.phase.schemas import (
+    DeleteFileResponse,
     LabelResponse,
     ListFilesResponse,
     ListModelsResponse,
@@ -25,6 +26,7 @@ from app.core import s3
 from app.core.config import settings
 from app.phase import utils
 from app.phase.exceptions import (
+    CollectFileBusyError,
     CollectFileNotFoundError,
     EmptyFilenamesError,
     InvalidModelFormatError,
@@ -43,6 +45,7 @@ from app.phase.repository import (
     CONTENT_TYPES,
     confirm_collect,
     create_phase_model,
+    delete_collect,
     deploy_phase_model,
     deployed_phase_models,
     get_file,
@@ -95,6 +98,29 @@ async def files(s: AsyncSession, platform: str) -> ListFilesResponse:
     """목록 전체 조회, 상태별 개수"""
     entries = await list_files(s, platform)
     return ListFilesResponse(platform=platform, files=entries, counts=utils.status_counts(entries))
+
+
+def _delete_objects(entry: CollectFileRead) -> None:
+    """원본 CSV 영상, 라벨 parquet 영상 pose 객체 삭제"""
+    objects = [(entry.csv_bucket, entry.csv_key), (entry.video_bucket, entry.video_key)]
+    if entry.label is not None:
+        objects += [(entry.label.data_bucket, entry.label.data_key), (entry.label.video_bucket, entry.label.video_key),
+                    (entry.label.data_bucket, entry.label.pose_key)]
+    for bucket, key in objects:
+        s3.delete_object(bucket, key)
+
+
+async def delete_file(s: AsyncSession, platform: str, filename: str) -> DeleteFileResponse:
+    """수집 파일 삭제, S3 먼저 지워 재시도 가능, 라벨링 중이면 409"""
+    entry = await get_file(s, platform, filename)
+    if entry is None:
+        raise CollectFileNotFoundError(filename)
+    if entry.is_labeling:
+        raise CollectFileBusyError(filename)
+    await asyncio.to_thread(_delete_objects, entry)
+    await delete_collect(s, platform, filename)
+    await s.commit()
+    return DeleteFileResponse(filename=filename)
 
 
 async def start_labeling(s: AsyncSession, platform: str, filenames: list[str]) -> LabelResponse:

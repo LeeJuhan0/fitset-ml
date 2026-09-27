@@ -31,6 +31,11 @@ class UploadConfirmResponse(CamelModel):
     status: str
 
 
+class DeleteFileResponse(CamelModel):
+    """파일 삭제 응답, 삭제된 filename"""
+    filename: str
+
+
 class ListFilesResponse(CamelModel):
     """files 응답, 목록 전체, 상태별 개수"""
     platform: str

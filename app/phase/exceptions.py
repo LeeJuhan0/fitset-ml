@@ -100,3 +100,14 @@ class ModelArtifactNotFoundError(HTTPException):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="모델 또는 산출물이 없습니다",
         )
+
+
+class CollectFileBusyError(HTTPException):
+    """라벨링 중이라 삭제 불가"""
+
+    def __init__(self, filename: str):
+        """상태코드와 detail 고정"""
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"라벨링 중인 파일은 삭제할 수 없습니다: {filename}",
+        )

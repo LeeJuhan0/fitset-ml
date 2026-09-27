@@ -211,6 +211,8 @@
     }
     .stats-btn:hover { border-color: var(--blue); color: var(--blue); }
     .stats-btn svg { width: 13px; height: 13px; }
+    .stats-btn.danger:hover:not(:disabled) { border-color: var(--red); color: var(--red); }
+    .stats-btn:disabled { opacity: .35; cursor: default; }
     .table-fade {
       position: absolute; left: 0; right: 0; bottom: 0; height: 64px; pointer-events: none;
       background: linear-gradient(to bottom, rgba(255,255,255,0), #fff); display: none;
@@ -1154,7 +1156,7 @@ function renderVideos() {
       <thead><tr>
         <th style="width:36px"><input type="checkbox" id="videoSelectAll" onclick="toggleVideoAll(this.checked)" /></th>
         <th>파일명</th><th>종목</th><th>상태</th><th>행 수</th><th>phase 행 수</th>
-        <th class="cell-right" style="text-align:right">수집일시</th><th style="width:52px;text-align:center">영상</th>
+        <th class="cell-right" style="text-align:right">수집일시</th><th style="width:52px;text-align:center">영상</th><th style="width:52px;text-align:center">삭제</th>
       </tr></thead>
       <tbody>${files.map(f => `
         <tr class="${selectedVideos.has(f.filename) ? 'selected' : ''}" onclick="toggleVideo(this,'${f.filename}')">
@@ -1169,6 +1171,12 @@ function renderVideos() {
           <td style="text-align:center">
             <button class="stats-btn" title="영상 보기" onclick="event.stopPropagation();openVideo('${f.filename}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+            </button>
+          </td>
+          <td style="text-align:center">
+            <button class="stats-btn danger" title="${f.status === 'labeling' ? '라벨링 중에는 삭제 불가' : '삭제'}" ${f.status === 'labeling' ? 'disabled' : ''}
+                    onclick="event.stopPropagation();deleteVideo('${f.filename}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
             </button>
           </td>
         </tr>`).join('')}
@@ -1210,6 +1218,16 @@ async function startLabeling() {
     if (data.skipped.length) alert('건너뜀:\n' + data.skipped.map(s => `${s.filename}: ${s.reason}`).join('\n'));
     loadVideos();
   } catch (e) { alert(e.message); btn.disabled = false; }
+}
+async function deleteVideo(name) {
+  const f = videoFiles.find(x => x.filename === name);
+  const note = f?.datasetFile?.uploaded ? '\n승격된 데이터셋 사본은 남습니다.' : '';
+  if (!confirm(`${name} 을 삭제할까요?\nCSV, 영상, 라벨 결과가 S3에서 지워지고 되돌릴 수 없습니다.${note}`)) return;
+  try {
+    await api('DELETE', `/phase/files?filename=${encodeURIComponent(name)}`);
+    selectedVideos.delete(name);
+    loadVideos();
+  } catch (e) { alert(e.message); }
 }
 async function promoteSelected() {
   const names = videoFiles.filter(f => selectedVideos.has(f.filename) && promotable(f)).map(f => f.filename);

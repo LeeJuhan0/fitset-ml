@@ -85,6 +85,16 @@ async def confirm_collect(s: AsyncSession, platform: str, filename: str, video_s
     return True
 
 
+async def delete_collect(s: AsyncSession, platform: str, filename: str) -> None:
+    """수집 행과 라벨 행 삭제, 승격 사본은 유지"""
+    row = await _row(s, platform, filename)
+    if row is None:
+        return
+    if row.label is not None:
+        await s.delete(row.label)
+    await s.delete(row)
+
+
 async def mark_labeling(s: AsyncSession, platform: str, filenames: list[str]) -> None:
     """선택 파일 labeling 상태 전이"""
     rows = (await s.exec(

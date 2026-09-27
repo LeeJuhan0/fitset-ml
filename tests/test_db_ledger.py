@@ -188,3 +188,15 @@ def test_status_hybrids_work_on_objects_and_queries(fresh_db):
     run(phase_repo.finish_phase_model, m.id, keys={"pt_key": "k"}, metrics={}, mlflow_run_id="r")
     assert query(select(PhaseModel).where(PhaseModel.is_completed))[0].id == m.id
     assert query(select(PhaseModel).where(PhaseModel.is_training)) == []
+
+
+def test_delete_collect_keeps_promoted_dataset(fresh_db):
+    name = run(phase_repo.reserve_collect, "ios", "PUSHUP", "DEV1")
+    run(phase_repo.confirm_collect, "ios", name, 1789790030.2, 2170)
+    run(phase_repo.finish_label, "ios", name, data_bucket="b", data_key="d", video_bucket="b", video_key="v", pose_key="p", phase_summary={})
+    run(phase_repo.reserve_promotion, "ios", name, dataset_filename="PUSHUP_DEV1_0001.parquet", bucket="b", key="k", phase_labeled=True)
+    run(phase_repo.delete_collect, "ios", name)
+    assert run(phase_repo.get_file, "ios", name) is None
+    assert query(select(PhaseLabel)) == []
+    assert [f.filename for f in query(select(DatasetFile))] == ["PUSHUP_DEV1_0001.parquet"]
+    run(phase_repo.delete_collect, "ios", name)
