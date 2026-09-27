@@ -24,6 +24,7 @@ from app.phase.schemas import (
 )
 from app.core import s3
 from app.core.config import settings
+from app.core.utils import LOST_PROCESS_ERROR, exit_error, read_tail
 from app.phase import utils
 from app.phase.exceptions import (
     ClassChangeBlockedError,
@@ -50,6 +51,7 @@ from app.phase.repository import (
     delete_collect,
     deploy_phase_model,
     deployed_phase_models,
+    fail_phase_model,
     get_file,
     get_phase_model,
     list_files,
@@ -66,6 +68,7 @@ from app.phase.repository import (
 )
 
 PUT_EXPIRES_SECONDS = 600
+_trainer_procs: dict[int, subprocess.Popen] = {}
 GET_EXPIRES_SECONDS = 3600
 
 
@@ -287,18 +290,17 @@ async def start_phase_training(s: AsyncSession, platform: str, class_name: str, 
         raise NoPhaseLabeledFilesError(class_name)
     version = utils.bump_version(await phase_model_versions(s, platform, class_name))
     model = await create_phase_model(s, platform, class_name, version, chosen, window=window, stride=stride, epochs=epochs, lr=lr)
-    await s.commit()
     spawn_trainer(platform, class_name, model.id, version, chosen, window=window, stride=stride, epochs=epochs, lr=lr)
+    await s.commit()
     return PhaseTrainResponse(model_id=model.id, version=version, class_name=class_name, num_files=len(chosen))
 
 
 def spawn_trainer(platform: str, class_name: str, model_id: int, version: str, filenames: list[str], *,
                   window: int, stride: int, epochs: int, lr: float) -> None:
-    """phase_trainer 서브프로세스 시작"""
-    log_path = pathlib.Path(tempfile.gettempdir()) / f"phase_trainer_{platform}_{class_name}_{version}.log"
-    log_file = open(log_path, "w")
-    subprocess.Popen(
-        [sys.executable, "-m", "app.worker.phase_trainer", "--platform", platform, "--class", class_name,
+    """phase_trainer 서브프로세스 시작, 종료 판정용 보관"""
+    log_file = open(_trainer_log_path(platform, class_name, version), "w")
+    _trainer_procs[model_id] = subprocess.Popen(
+        [sys.executable, "-u", "-m", "app.worker.phase_trainer", "--platform", platform, "--class", class_name,
          "--model-id", str(model_id), "--version", version, "--files", json.dumps(filenames),
          "--window", str(window), "--stride", str(stride), "--epochs", str(epochs), "--lr", str(lr)],
         stdout=log_file,
@@ -306,8 +308,30 @@ def spawn_trainer(platform: str, class_name: str, model_id: int, version: str, f
     )
 
 
+def _trainer_log_path(platform: str, class_name: str, version: str) -> pathlib.Path:
+    """phase_trainer 로그 경로"""
+    return pathlib.Path(tempfile.gettempdir()) / f"phase_trainer_{platform}_{class_name}_{version}.log"
+
+
+async def reconcile_training(s: AsyncSession, platform: str) -> None:
+    """training 행의 워커 종료 판정, 죽었으면 failed 와 사유"""
+    for m in await list_phase_models(s, platform):
+        if not m.is_training:
+            continue
+        proc = _trainer_procs.get(m.id)
+        if proc is not None and proc.poll() is None:
+            continue
+        _trainer_procs.pop(m.id, None)
+        if proc is not None and proc.returncode == 0:
+            continue
+        error = LOST_PROCESS_ERROR if proc is None else exit_error(proc.returncode, read_tail(_trainer_log_path(platform, m.class_name, m.version)))
+        await fail_phase_model(s, m.id, error)
+    await s.commit()
+
+
 async def models(s: AsyncSession, platform: str, class_name: str | None) -> ListModelsResponse:
-    """모델 목록"""
+    """종료 판정 후 모델 목록"""
+    await reconcile_training(s, platform)
     return ListModelsResponse(platform=platform, models=await list_phase_models(s, platform, class_name))
 
 

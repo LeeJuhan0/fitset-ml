@@ -31,22 +31,24 @@ async def start_training(
 
 
 @router.get("/{platform}/train/status", response_model=ApiResponse[TrainStatusResponse])
-def train_status(
+async def train_status(
+    session: DbSessionDep,
     query: Annotated[JobIdRequest, Query()],
     platform: str = Depends(validate_platform),
     trace_id: str = Depends(get_trace_id),
 ):
-    """MLflow run 상태 조회"""
-    return ApiResponse(trace_id=trace_id, data=service.get_status(platform, query.job_id))
+    """학습 상태 조회, 죽은 프로세스는 failed 와 사유"""
+    return ApiResponse(trace_id=trace_id, data=await service.get_status(session, platform, query.job_id))
 
 
 @router.get("/{platform}/runs", response_model=ApiResponse[RunsResponse])
-def list_runs(
+async def list_runs(
+    session: DbSessionDep,
     platform: str = Depends(validate_platform),
     trace_id: str = Depends(get_trace_id),
 ):
-    """최근 run 목록과 best run"""
-    return ApiResponse(trace_id=trace_id, data=service.list_runs(platform))
+    """최근 run 목록과 best run, 실패 사유 포함"""
+    return ApiResponse(trace_id=trace_id, data=await service.list_runs(session, platform))
 
 
 @router.get("/{platform}/runs/{run_id}/history", response_model=ApiResponse[MetricHistoryResponse])

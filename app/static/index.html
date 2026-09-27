@@ -251,6 +251,7 @@
     .pill.deployed { background: var(--orange-soft); color: var(--orange-deep); }
     .pill.best { background: #FEF3C7; color: #B45309; }
     .pill.failed { background: #FEE2E2; color: #DC2626; }
+    .train-error { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: #FEE2E2; color: #B91C1C; font-size: 12px; white-space: pre-wrap; max-height: 160px; overflow: auto; }
 
     /* ── 우측 스택: 학습 설정 / 배포된 모델 ── */
     .side-stack { display: flex; flex-direction: column; gap: 22px; }
@@ -462,6 +463,7 @@
           <div class="gauge-num" id="gaugeNum">0%</div>
         </div>
         <div class="gauge-status" id="progressLabel">학습 이력 없음</div>
+        <div class="train-error" id="trainError" style="display:none"></div>
         <div class="metrics-grid" id="metricsGrid">
           <div class="metric-box"><div class="lbl">Train Loss</div><div class="val">-</div></div>
           <div class="metric-box"><div class="lbl">Val Loss</div><div class="val">-</div></div>
@@ -931,7 +933,10 @@ function pollStatus() {
   pollTimer = setInterval(async () => {
     try {
       const { data } = await api('GET', `/train/status?jobId=${currentJobId}`);
-      const { status, experimentId, epoch, totalEpochs, trainLoss, valLoss, valAccuracy } = data;
+      const { status, experimentId, epoch, totalEpochs, trainLoss, valLoss, valAccuracy, error } = data;
+      const errorBox = document.getElementById('trainError');
+      errorBox.textContent = error ?? '';
+      errorBox.style.display = status === 'failed' && error ? 'block' : 'none';
       const pct = totalEpochs ? Math.round((epoch / totalEpochs) * 100) : 0;
       setGauge(pct);
       document.getElementById('progressLabel').innerHTML =
@@ -1059,7 +1064,7 @@ function renderRuns() {
         const f1  = r.metrics.f1Macro != null ? r.metrics.f1Macro.toFixed(3) : '-';
         const started = new Date(r.startTime).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
         const dur = r.duration != null ? `${Math.floor(r.duration / 60)}분 ${r.duration % 60}초` : '-';
-        const statusBadge = r.status === 'FAILED' ? '<span class="pill failed">실패</span>'
+        const statusBadge = r.status === 'FAILED' ? `<span class="pill failed" title="${(r.error ?? '').replace(/"/g, '&quot;')}">실패</span>`
           : r.status === 'RUNNING' ? '<span class="pill idle">학습 중</span>'
           : '<span class="pill trained">완료</span>';
         // 배포 열: 현재 배포 버전이면 배지, 완료된 run이면 배포 버튼(롤백 포함)

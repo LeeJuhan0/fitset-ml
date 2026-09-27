@@ -18,6 +18,7 @@ def _run(run_id, name, status, val_acc, start=1000, end=4000):
                 "train_loss": 0.2, "val_loss": 0.3, "val_accuracy": val_acc,
                 "test_accuracy": 0.88, "f1_macro": 0.9, "epoch": 100,
             },
+            tags={},
         ),
     )
 

@@ -19,6 +19,7 @@ def register_models() -> None:
     from app.data import models as data_models
     from app.deployment import models as deployment_models
     from app.phase import models as phase_models
+    from app.training import models as training_models
 
 
 def create_engine(dsn: str | None = None) -> AsyncEngine:

@@ -27,6 +27,7 @@ class TrainStatusResponse(CamelModel):
     train_loss: float | None = None
     val_loss: float | None = None
     val_accuracy: float | None = None
+    error: str | None = None
 
 
 class RunParams(CamelModel):
@@ -55,6 +56,7 @@ class RunItem(CamelModel):
     end_time: int | None = None
     params: RunParams
     metrics: RunMetrics
+    error: str | None = None
 
     @computed_field
     @property

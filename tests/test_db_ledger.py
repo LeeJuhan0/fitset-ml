@@ -214,3 +214,12 @@ def test_change_collect_class_renames_and_resets_label(fresh_db):
     assert changed.status == "pending" and changed.label is None and changed.uploaded and changed.rows == 2170
     assert run(phase_repo.get_file, "ios", name) is None
     assert query(select(PhaseLabel)) == []
+
+
+def test_model_classes_follow_master_index(fresh_db):
+    from app.core.config import CLASSES
+    import app.exercises.repository as ex_repo
+    assert run(data_repo.model_classes) == CLASSES
+    names = CLASSES + ["BAND_CURL", "BOX_JUMP", "MACHINE_CHEST_PRESS", "WALL_SIT"]
+    run(ex_repo.upsert_exercises, [{"index": i, "class": c, "slug": c.lower(), "name": c} for i, c in enumerate(names)])
+    assert run(data_repo.model_classes) == names

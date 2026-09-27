@@ -356,3 +356,25 @@ def test_change_class_rewrites_label_and_blocks_after_promotion(admin_client, mo
     assert patch("nope.csv").status_code == 404
     assert patch("PUSHUP_DEV1_0001.csv", "PLANK").status_code == 400
     assert len(copied) == 2
+
+
+def test_dead_phase_trainer_marked_failed(admin_client, monkeypatch):
+    from unittest.mock import MagicMock
+    from app.core.utils import LOST_PROCESS_ERROR
+
+    def model(i, status):
+        return PhaseModelRead(id=i, platform="ios", class_name="PUSHUP", version=f"v1.{i}", status=status,
+                              bucket="fitset-phase-models", created_at="2026-09-22T03:00:00+00:00")
+    rows = [model(1, "training"), model(2, "training"), model(3, "training"), model(4, "completed")]
+    monkeypatch.setattr(phase_mod, "list_phase_models", async_(lambda s, p, c=None: rows))
+    failed = {}
+    monkeypatch.setattr(phase_mod, "fail_phase_model", async_(lambda s, i, e: failed.update({i: e})))
+    alive, oom = MagicMock(), MagicMock()
+    alive.poll.return_value = None
+    oom.poll.return_value = oom.returncode = -9
+    monkeypatch.setattr(phase_mod, "_trainer_procs", {1: alive, 2: oom})
+
+    assert admin_client.get("/api/v1/ios/phase/models").status_code == 200
+    assert set(failed) == {2, 3}
+    assert "OOM" in failed[2] and failed[3] == LOST_PROCESS_ERROR
+    assert list(phase_mod._trainer_procs) == [1]

@@ -3,7 +3,8 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core import s3
-from app.core.models import Platform, ensure_device, ensure_platform, find_exercise
+from app.core.config import CLASSES
+from app.core.models import Exercise, Platform, ensure_device, ensure_platform, find_exercise
 from app.exercises.repository import folder_for
 from app.data import utils
 from app.data.models import DatasetFile, DatasetFileRead
@@ -95,3 +96,9 @@ async def dataset_locations(s: AsyncSession, platform: str, filenames: list[str]
         select(DatasetFile).join(Platform).where(Platform.name == platform, DatasetFile.filename.in_(filenames))
     )).all()
     return {r.filename: (r.bucket, r.s3_key) for r in rows}
+
+
+async def model_classes(s: AsyncSession) -> list[str]:
+    """학습 출력 클래스, 마스터 전체 인덱스 순, 비면 CLASSES"""
+    rows = (await s.exec(select(Exercise.class_name).order_by(Exercise.index))).all()
+    return list(rows) or CLASSES

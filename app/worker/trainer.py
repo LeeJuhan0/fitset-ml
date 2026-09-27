@@ -18,9 +18,9 @@ async def _with_session(fn, *args):
     """세션 하나 열어 repository 코루틴 실행"""
     async with db.session() as s:
         return await fn(s, *args)
-from app.core.config import CLASSES, settings
+from app.core.config import settings
 from app.core.s3 import download_object, upload_model_artifact
-from app.data.repository import dataset_locations, mark_trained
+from app.data.repository import dataset_locations, mark_trained, model_classes
 from app.worker.model_def import FitSetModel
 from app.worker.preprocess import STRIDE, WINDOW, compute_stats, load_csv, normalize, sliding_window
 
@@ -28,6 +28,8 @@ from app.worker.preprocess import STRIDE, WINDOW, compute_stats, load_csv, norma
 def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, version: str):
     """분류 학습 파이프라인, 다운로드 윈도잉 학습 평가 변환 업로드"""
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+
+    classes = db.run(_with_session(model_classes))
 
     with mlflow.start_run(run_id=run_id):
         mlflow.log_params({
@@ -38,7 +40,7 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
             "optimizer": "Adam",
             "num_files": len(files),
             "files": json.dumps(files),
-            "num_classes": len(CLASSES),
+            "num_classes": len(classes),
             "arch_input_window": 200,
             "arch_input_channels": 6,
             "arch_cnn_filters": 256,
@@ -66,7 +68,7 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
             """구간 모음을 윈도우 배열로"""
             xs, ys = [], []
             for signals, labels in segments.values():
-                w, yy = sliding_window(signals, labels, CLASSES, offset=offset)
+                w, yy = sliding_window(signals, labels, classes, offset=offset)
                 if len(w):
                     xs.append(w)
                     ys.append(yy)
@@ -113,7 +115,7 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
             return to_loader(normalize(Xa, mean, std), ya, True)
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = FitSetModel(num_classes=len(CLASSES)).to(device)
+        model = FitSetModel(num_classes=len(classes)).to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
         criterion = nn.CrossEntropyLoss()
 
@@ -164,26 +166,26 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
         test_acc = test_correct / len(test_loader.dataset)
         f1 = f1_score(all_true, all_preds, average="macro")
 
-        label_ids = list(range(len(CLASSES)))
+        label_ids = list(range(len(classes)))
         per_class_f1 = f1_score(all_true, all_preds, average=None, labels=label_ids, zero_division=0)
 
         mlflow.log_metrics({
             "test_accuracy": round(test_acc, 4),
             "f1_macro": round(f1, 4),
-            **{f"f1_{CLASSES[i]}": round(float(v), 4) for i, v in enumerate(per_class_f1)},
+            **{f"f1_{classes[i]}": round(float(v), 4) for i, v in enumerate(per_class_f1)},
         })
 
         mlflow.log_dict(
             classification_report(
                 all_true, all_preds,
-                labels=label_ids, target_names=CLASSES,
+                labels=label_ids, target_names=classes,
                 output_dict=True, zero_division=0,
             ),
             "classification_report.json",
         )
         mlflow.log_dict(
             {
-                "labels": CLASSES,
+                "labels": classes,
                 "matrix": confusion_matrix(all_true, all_preds, labels=label_ids).tolist(),
             },
             "confusion_matrix.json",
@@ -223,7 +225,7 @@ def run(platform: str, files: list[str], epochs: int, lr: float, run_id: str, ve
             meta = {
                 "platform": platform,
                 "version": version,
-                "classes": CLASSES,
+                "classes": classes,
                 "input_shape": [1, 200, 6],
                 "mean": mean,
                 "std": std,
