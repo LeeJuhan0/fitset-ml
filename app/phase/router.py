@@ -7,8 +7,9 @@ from app.data.schemas import PresignedUrlRequest
 from app.core.security import check_basic_auth
 from app.deps import DbSessionDep, get_trace_id, validate_platform
 from app.phase import service
-from app.phase.models import PhaseModelRead
+from app.phase.models import CollectFileRead, PhaseModelRead
 from app.phase.schemas import (
+    ChangeClassRequest,
     DeleteFileResponse,
     LabelResponse,
     LabelRequest,
@@ -72,6 +73,17 @@ async def delete_file(
 ):
     """수집 파일 삭제, S3 객체와 목록 행"""
     return ApiResponse(trace_id=trace_id, data=await service.delete_file(session, platform, query.filename))
+
+
+@router.patch("/{platform}/phase/files/class", response_model=ApiResponse[CollectFileRead])
+async def change_class(
+    session: DbSessionDep,
+    payload: ChangeClassRequest,
+    platform: str = Depends(validate_platform),
+    trace_id: str = Depends(get_trace_id),
+):
+    """종목 변경, 파일명 재채번, 라벨 초기화, 승격 후 409"""
+    return ApiResponse(trace_id=trace_id, data=await service.change_class(session, platform, payload.filename, payload.class_name))
 
 
 @router.post("/{platform}/phase/label", response_model=ApiResponse[LabelResponse], status_code=202)

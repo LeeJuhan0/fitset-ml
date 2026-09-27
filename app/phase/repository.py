@@ -38,16 +38,21 @@ async def get_file(s: AsyncSession, platform: str, filename: str) -> CollectFile
     return CollectFileRead.from_row(row) if row is not None else None
 
 
+async def _next_filename(s: AsyncSession, platform_id: int, class_name: str, device_id: str) -> str:
+    """플랫폼 기존 행 기준 다음 파일명"""
+    entries = [
+        {"filename": r.filename, "class": r.class_name, "deviceId": r.device.device_id}
+        for r in (await s.exec(select(CollectFile).where(CollectFile.platform_id == platform_id))).all()
+    ]
+    return utils.next_filename(entries, class_name, device_id, owner_field="deviceId")
+
+
 async def reserve_collect(s: AsyncSession, platform: str, class_name: str, device_id: str) -> str:
     """예약 행 삽입, 채번, UNIQUE 충돌 재시도"""
     for _ in range(_RESERVE_RETRIES):
         p = await ensure_platform(s, platform)
         device = await ensure_device(s, p, device_id)
-        entries = [
-            {"filename": r.filename, "class": r.class_name, "deviceId": r.device.device_id}
-            for r in (await s.exec(select(CollectFile).where(CollectFile.platform_id == p.id))).all()
-        ]
-        filename = utils.next_filename(entries, class_name, device_id, owner_field="deviceId")
+        filename = await _next_filename(s, p.id, class_name, device_id)
         folder = await folder_for(s, class_name)
         s.add(CollectFile(
             platform=p,
@@ -93,6 +98,26 @@ async def delete_collect(s: AsyncSession, platform: str, filename: str) -> None:
     if row.label is not None:
         await s.delete(row.label)
     await s.delete(row)
+
+
+async def change_collect_class(s: AsyncSession, platform: str, filename: str, class_name: str) -> CollectFileRead:
+    """종목 변경, 새 파일명과 키 채번, 라벨 초기화"""
+    row = await _row(s, platform, filename)
+    new_name = await _next_filename(s, row.platform_id, class_name, row.device.device_id)
+    folder = await folder_for(s, class_name)
+    if row.label is not None:
+        await s.delete(row.label)
+        row.label = None
+    row.filename = new_name
+    row.class_name = class_name
+    row.exercise = await find_exercise(s, class_name)
+    row.csv_key = s3.collect_key(platform, folder, new_name)
+    row.video_key = s3.collect_key(platform, folder, utils.video_name(new_name))
+    row.status = utils.STATUS_PENDING
+    row.error = None
+    s.add(row)
+    await s.flush()
+    return CollectFileRead.from_row(row)
 
 
 async def mark_labeling(s: AsyncSession, platform: str, filenames: list[str]) -> None:

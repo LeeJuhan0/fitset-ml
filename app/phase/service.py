@@ -26,6 +26,7 @@ from app.core import s3
 from app.core.config import settings
 from app.phase import utils
 from app.phase.exceptions import (
+    ClassChangeBlockedError,
     CollectFileBusyError,
     CollectFileNotFoundError,
     EmptyFilenamesError,
@@ -44,6 +45,7 @@ from app.phase.models import CollectFileRead, PhaseModelRead
 from app.phase.repository import (
     CONTENT_TYPES,
     confirm_collect,
+    change_collect_class,
     create_phase_model,
     delete_collect,
     deploy_phase_model,
@@ -100,14 +102,44 @@ async def files(s: AsyncSession, platform: str) -> ListFilesResponse:
     return ListFilesResponse(platform=platform, files=entries, counts=utils.status_counts(entries))
 
 
-def _delete_objects(entry: CollectFileRead) -> None:
-    """원본 CSV 영상, 라벨 parquet 영상 pose 객체 삭제"""
-    objects = [(entry.csv_bucket, entry.csv_key), (entry.video_bucket, entry.video_key)]
-    if entry.label is not None:
-        objects += [(entry.label.data_bucket, entry.label.data_key), (entry.label.video_bucket, entry.label.video_key),
-                    (entry.label.data_bucket, entry.label.pose_key)]
+def _label_objects(entry: CollectFileRead) -> list[tuple[str, str]]:
+    """라벨 parquet 영상 pose 객체 위치"""
+    if entry.label is None:
+        return []
+    return [(entry.label.data_bucket, entry.label.data_key), (entry.label.video_bucket, entry.label.video_key),
+            (entry.label.data_bucket, entry.label.pose_key)]
+
+
+def _delete_objects(objects: list[tuple[str, str]]) -> None:
+    """S3 객체 목록 삭제"""
     for bucket, key in objects:
         s3.delete_object(bucket, key)
+
+
+def _copy_originals(entry: CollectFileRead, csv_key: str, video_key: str) -> None:
+    """원본 CSV 영상을 새 키로 복사"""
+    s3.copy_object(entry.csv_bucket, entry.csv_key, entry.csv_bucket, csv_key)
+    s3.copy_object(entry.video_bucket, entry.video_key, entry.video_bucket, video_key)
+
+
+async def change_class(s: AsyncSession, platform: str, filename: str, class_name: str) -> CollectFileRead:
+    """종목 변경, 새 키로 복사 후 행 갱신, 옛 객체와 라벨 삭제, 승격 후 409"""
+    entry = await get_file(s, platform, filename)
+    if entry is None:
+        raise CollectFileNotFoundError(filename)
+    if not await is_class_known(s, class_name):
+        raise UnsupportedClassError(class_name)
+    reason = utils.class_change_block_reason(entry)
+    if reason is not None:
+        raise ClassChangeBlockedError(filename, reason)
+    if entry.class_name == class_name:
+        return entry
+    changed = await change_collect_class(s, platform, filename, class_name)
+    await asyncio.to_thread(_copy_originals, entry, changed.csv_key, changed.video_key)
+    await s.commit()
+    # ponytail: 옛 객체 삭제 실패는 고아 객체로 남음, 잦으면 정리 배치
+    await asyncio.to_thread(_delete_objects, [(entry.csv_bucket, entry.csv_key), (entry.video_bucket, entry.video_key), *_label_objects(entry)])
+    return changed
 
 
 async def delete_file(s: AsyncSession, platform: str, filename: str) -> DeleteFileResponse:
@@ -117,7 +149,7 @@ async def delete_file(s: AsyncSession, platform: str, filename: str) -> DeleteFi
         raise CollectFileNotFoundError(filename)
     if entry.is_labeling:
         raise CollectFileBusyError(filename)
-    await asyncio.to_thread(_delete_objects, entry)
+    await asyncio.to_thread(_delete_objects, [(entry.csv_bucket, entry.csv_key), (entry.video_bucket, entry.video_key), *_label_objects(entry)])
     await delete_collect(s, platform, filename)
     await s.commit()
     return DeleteFileResponse(filename=filename)

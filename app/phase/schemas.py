@@ -31,6 +31,12 @@ class UploadConfirmResponse(CamelModel):
     status: str
 
 
+class ChangeClassRequest(CamelModel):
+    """종목 변경 바디, filename, class"""
+    filename: str
+    class_name: str = Field(alias="class")
+
+
 class DeleteFileResponse(CamelModel):
     """파일 삭제 응답, 삭제된 filename"""
     filename: str

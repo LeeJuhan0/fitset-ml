@@ -82,6 +82,17 @@ def promote_block_reason(entry: CollectFileRead | None) -> str | None:
     return None
 
 
+def class_change_block_reason(entry: CollectFileRead) -> str | None:
+    """종목 변경 불가 사유, 미업로드, 라벨링 중, 승격"""
+    if not entry.uploaded:
+        return "업로드 미완료"
+    if entry.is_labeling:
+        return "라벨링 중"
+    if entry.dataset_file is not None:
+        return "승격됨"
+    return None
+
+
 def is_valid_model_format(fmt: str) -> bool:
     """다운로드 포맷 검증, pt onnx mlpackage"""
     return fmt in MODEL_FORMATS

@@ -303,3 +303,28 @@ def test_delete_removes_objects_and_row(admin_client, monkeypatch):
     assert admin_client.delete("/api/v1/ios/phase/files?filename=PUSHUP_DEV1_0002.csv").status_code == 409
     assert admin_client.delete("/api/v1/ios/phase/files?filename=nope.csv").status_code == 404
     assert removed == ["PUSHUP_DEV1_0001.csv"]
+
+
+def test_change_class_copies_and_blocks_after_promotion(admin_client, monkeypatch):
+    promoted = _entry("PUSHUP_DEV1_0002.csv")
+    promoted.dataset_file = _dataset()
+    files = {"PUSHUP_DEV1_0001.csv": _entry(), "PUSHUP_DEV1_0002.csv": promoted,
+             "PUSHUP_DEV1_0003.csv": _entry("PUSHUP_DEV1_0003.csv", status="labeling")}
+    copied, deleted = [], []
+    monkeypatch.setattr(phase_mod, "get_file", async_(lambda s, p, f: files.get(f)))
+    monkeypatch.setattr(phase_mod, "change_collect_class", async_(lambda s, p, f, c: _entry("SQUAT_DEV1_0001.csv", "SQUAT")))
+    monkeypatch.setattr(phase_mod.s3, "copy_object", lambda b, k, db, dk: copied.append((k, dk)))
+    monkeypatch.setattr(phase_mod.s3, "delete_object", lambda b, k: deleted.append(k))
+
+    resp = admin_client.patch("/api/v1/ios/phase/files/class", json={"filename": "PUSHUP_DEV1_0001.csv", "class": "SQUAT"})
+    assert resp.status_code == 200 and resp.json()["data"]["filename"] == "SQUAT_DEV1_0001.csv"
+    assert copied == [("ios/PUSHUP/PUSHUP_DEV1_0001.csv", "ios/SQUAT/SQUAT_DEV1_0001.csv"),
+                      ("ios/PUSHUP/PUSHUP_DEV1_0001.mov", "ios/SQUAT/SQUAT_DEV1_0001.mov")]
+    assert deleted == ["ios/PUSHUP/PUSHUP_DEV1_0001.csv", "ios/PUSHUP/PUSHUP_DEV1_0001.mov"]
+
+    patch = lambda f, c="SQUAT": admin_client.patch("/api/v1/ios/phase/files/class", json={"filename": f, "class": c}).status_code
+    assert patch("PUSHUP_DEV1_0002.csv") == 409
+    assert patch("PUSHUP_DEV1_0003.csv") == 409
+    assert patch("nope.csv") == 404
+    assert patch("PUSHUP_DEV1_0001.csv", "PLANK") == 400
+    assert len(copied) == 2

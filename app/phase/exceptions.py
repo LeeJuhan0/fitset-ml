@@ -111,3 +111,14 @@ class CollectFileBusyError(HTTPException):
             status_code=status.HTTP_409_CONFLICT,
             detail=f"라벨링 중인 파일은 삭제할 수 없습니다: {filename}",
         )
+
+
+class ClassChangeBlockedError(HTTPException):
+    """승격, 라벨링 중, 미업로드라 종목 변경 불가"""
+
+    def __init__(self, filename: str, reason: str):
+        """상태코드와 detail 고정"""
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"종목을 바꿀 수 없습니다({reason}): {filename}",
+        )

@@ -198,6 +198,7 @@
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .pill { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 5px 12px; white-space: nowrap; }
     .pill.class  { background: #EDE9FE; color: #7C3AED; }   /* 종목: 연보라/보라 */
+    .class-select { height: 30px; padding: 0 8px; border-radius: 999px; border: 1px solid #DDD6FE; background: #F5F3FF; color: #7C3AED; font-size: 12px; font-weight: 600; outline: none; cursor: pointer; }
     .pill.trained{ background: #DCFCE7; color: #15803D; }   /* 학습됨: 연녹/녹 */
     .pill.idle   { background: #F3F4F6; color: #6B7280; }   /* 미학습: 연회/회 */
     .pill.pending{ background: #FCE7F3; color: #DC2626; }   /* 업로드 대기: 연분홍/빨강 */
@@ -1099,10 +1100,15 @@ async function loadVersionStats() {
 const STATUS_LABEL = { pending: '대기', labeling: '라벨링 중', labeled: '완료', failed: '실패' };
 let videoFiles = [];
 let selectedVideos = new Set();
+let exerciseClasses = [];
 
 async function loadVideos() {
   const el = document.getElementById('videoList');
   try {
+    if (!exerciseClasses.length) {
+      const ex = await fetch('/api/v1/exercises').then(r => r.json()).catch(() => null);
+      exerciseClasses = (ex?.data?.exercises ?? []).filter(e => e.phaseSupported).map(e => e.class).sort();
+    }
     const { data } = await api('GET', '/phase/files');
     videoFiles = data.files;
     rebuildVideoFilters(data.counts);
@@ -1147,6 +1153,33 @@ function phaseMini(f) {
   return `<span class="phase-mini"><span class="p0">0 ${c['0'] ?? 0}</span><span class="p1">1 ${c['1'] ?? 0}</span><span class="p2">2 ${c['2'] ?? 0}</span></span>`;
 }
 
+function classChangeBlock(f) {
+  if (f.uploaded === false) return '업로드 미완료';
+  if (f.status === 'labeling') return '라벨링 중';
+  if (f.datasetFile) return '승격 후에는 바꿀 수 없음';
+  return null;
+}
+
+function classCell(f) {
+  const block = classChangeBlock(f);
+  if (block || !exerciseClasses.length) return `<span class="pill class" title="${block ?? ''}">${f.class}</span>`;
+  const classes = exerciseClasses.includes(f.class) ? exerciseClasses : [f.class, ...exerciseClasses];
+  return `<select class="class-select" title="종목 변경" onclick="event.stopPropagation()" onchange="changeClass('${f.filename}', this)">
+    ${classes.map(c => `<option value="${c}" ${c === f.class ? 'selected' : ''}>${c}</option>`).join('')}</select>`;
+}
+
+async function changeClass(name, sel) {
+  const f = videoFiles.find(x => x.filename === name);
+  const note = f?.label ? '\n기존 라벨 결과는 지워지고 다시 라벨링해야 합니다.' : '';
+  if (!confirm(`${name} 의 종목을 ${sel.value} 로 바꿀까요?\n파일명이 새로 매겨집니다.${note}`)) { sel.value = f.class; return; }
+  sel.disabled = true;
+  try {
+    const { data } = await api('PATCH', '/phase/files/class', { filename: name, class: sel.value });
+    if (selectedVideos.delete(name)) selectedVideos.add(data.filename);
+    loadVideos();
+  } catch (e) { alert(e.message); sel.value = f.class; sel.disabled = false; }
+}
+
 function renderVideos() {
   const el = document.getElementById('videoList');
   const files = visibleVideos();
@@ -1163,7 +1196,7 @@ function renderVideos() {
           <td><input type="checkbox" ${selectedVideos.has(f.filename) ? 'checked' : ''} ${selectable(f) ? '' : 'disabled'}
                 onclick="event.stopPropagation();toggleVideo(this.closest('tr'),'${f.filename}')"/></td>
           <td class="cell-name"><div class="nm">${f.filename}</div><div class="id">${f.deviceId} · ${f.label ? f.label.videoBucket : f.videoBucket}</div></td>
-          <td><span class="pill class">${f.class}</span></td>
+          <td>${classCell(f)}</td>
           <td>${videoStatusPill(f)}</td>
           <td>${f.rows ?? '-'}</td>
           <td>${phaseMini(f)}</td>

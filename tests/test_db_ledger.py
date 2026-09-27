@@ -200,3 +200,16 @@ def test_delete_collect_keeps_promoted_dataset(fresh_db):
     assert query(select(PhaseLabel)) == []
     assert [f.filename for f in query(select(DatasetFile))] == ["PUSHUP_DEV1_0001.parquet"]
     run(phase_repo.delete_collect, "ios", name)
+
+
+def test_change_collect_class_renames_and_resets_label(fresh_db):
+    name = run(phase_repo.reserve_collect, "ios", "PUSHUP", "DEV1")
+    run(phase_repo.confirm_collect, "ios", name, 1789790030.2, 2170)
+    run(phase_repo.reserve_collect, "ios", "SQUAT", "DEV1")
+    run(phase_repo.finish_label, "ios", name, data_bucket="b", data_key="d", video_bucket="b", video_key="v", pose_key="p", phase_summary={})
+    changed = run(phase_repo.change_collect_class, "ios", name, "SQUAT")
+    assert changed.filename == "SQUAT_DEV1_0002.csv" and changed.class_name == "SQUAT"
+    assert changed.csv_key == "ios/000_SQUAT/SQUAT_DEV1_0002.csv" and changed.video_key == "ios/000_SQUAT/SQUAT_DEV1_0002.mov"
+    assert changed.status == "pending" and changed.label is None and changed.uploaded and changed.rows == 2170
+    assert run(phase_repo.get_file, "ios", name) is None
+    assert query(select(PhaseLabel)) == []
