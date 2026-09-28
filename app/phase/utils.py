@@ -1,8 +1,7 @@
-from app.core.config import PHASE_CLASSES
 from app.phase.enums import CollectStatus, ModelFormat, PhaseModelStatus
 from app.phase.models import CollectFileRead
 from app.training.utils import bump_version
-from app.data.utils import is_supported_class, is_valid_device_id, next_filename
+from app.data.utils import is_valid_device_id, next_filename
 
 STATUS_PENDING = CollectStatus.PENDING.value
 STATUS_LABELING = CollectStatus.LABELING.value
@@ -17,11 +16,6 @@ MODEL_FORMATS = tuple(f.value for f in ModelFormat)
 MODEL_STATUS_TRAINING = PhaseModelStatus.TRAINING.value
 MODEL_STATUS_COMPLETED = PhaseModelStatus.COMPLETED.value
 MODEL_STATUS_FAILED = PhaseModelStatus.FAILED.value
-
-
-def supports_phase(class_name: str) -> bool:
-    """구간 라벨링 지원 종목 판정, PHASE_CLASSES"""
-    return class_name in PHASE_CLASSES
 
 
 def stem(filename: str) -> str:

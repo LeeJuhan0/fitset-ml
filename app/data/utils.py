@@ -1,13 +1,6 @@
 import re
 
-from app.core.config import CLASSES
-
 SAFE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-
-
-def is_supported_class(class_name: str) -> bool:
-    """CLASSES 포함 여부"""
-    return class_name in CLASSES
 
 
 def is_valid_device_id(device_id: str) -> bool:
