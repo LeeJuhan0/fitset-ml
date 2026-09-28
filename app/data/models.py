@@ -7,7 +7,8 @@ from sqlmodel import Field, Relationship, SQLModel
 from app.core.models import CREATED_AT, UPDATED_AT, WIRE, Device, Exercise, Platform
 
 if TYPE_CHECKING:
-    from app.phase.models import CollectFile, PhaseModel
+    from app.labeling.models import CollectFile
+    from app.phase.models import PhaseModel
 
 
 class DatasetFileBase(SQLModel):

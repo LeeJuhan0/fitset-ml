@@ -1,12 +1,13 @@
 from sqlmodel import select
 
 import app.data.repository as data_repo
+import app.labeling.repository as labeling_repo
 import app.phase.repository as phase_repo
 import app.training.repository as train_repo
 from app.core import db
 from app.core.models import ensure_device, ensure_platform
 from app.data.models import DatasetFile
-from app.phase.models import CollectFile, PhaseLabel
+from app.labeling.models import CollectFile, PhaseLabel
 
 
 def run(fn, *args, **kwargs):
@@ -47,7 +48,7 @@ def test_relationships_back_populate(fresh_db):
             assert platform.devices == [device]
     db.run(make())
     f1 = run(data_repo.reserve_admin_upload, "ios", "SQUAT", "DEV1")[0]
-    c1 = run(phase_repo.reserve_collect, "ios", "PUSHUP", "DEV1")
+    c1 = run(labeling_repo.reserve_collect, "ios", "PUSHUP", "DEV1")
     dataset = query(select(DatasetFile).where(DatasetFile.filename == f1))[0]
     collect = query(select(CollectFile).where(CollectFile.filename == c1))[0]
     assert dataset.platform.name == "ios" and dataset.device.device_id == "DEV1"
@@ -70,25 +71,25 @@ def test_upload_confirm_and_training_view(fresh_db):
 
 
 def test_collect_lifecycle_to_labeled(fresh_db):
-    name = run(phase_repo.reserve_collect, "ios", "PUSHUP", "DEV1")
-    entry = run(phase_repo.get_file, "ios", name)
+    name = run(labeling_repo.reserve_collect, "ios", "PUSHUP", "DEV1")
+    entry = run(labeling_repo.get_file, "ios", name)
     assert entry.status == "pending" and entry.uploaded is False
     assert entry.csv_key == "ios/001_PUSHUP/PUSHUP_DEV1_0001.csv"
     assert entry.video_key == "ios/001_PUSHUP/PUSHUP_DEV1_0001.mov"
 
-    assert run(phase_repo.confirm_collect, "ios", name, 1789790030.2, 2170) is True
-    assert run(phase_repo.confirm_collect, "ios", "ghost.csv", 1.0, None) is False
-    run(phase_repo.mark_labeling, "ios", [name])
-    assert run(phase_repo.get_file, "ios", name).status == "labeling"
+    assert run(labeling_repo.confirm_collect, "ios", name, 1789790030.2, 2170) is True
+    assert run(labeling_repo.confirm_collect, "ios", "ghost.csv", 1.0, None) is False
+    run(labeling_repo.mark_labeling, "ios", [name])
+    assert run(labeling_repo.get_file, "ios", name).status == "labeling"
 
-    run(phase_repo.finish_label, 
+    run(labeling_repo.finish_label, 
         "ios", name,
         data_bucket="fitset-collect-labeled", data_key="ios/PUSHUP/PUSHUP_DEV1_0001.parquet",
         video_bucket="fitset-collect-labeled", video_key=entry.video_key,
         pose_key="ios/PUSHUP/PUSHUP_DEV1_0001.pose.json",
         phase_summary={"rows": 2170, "rowPhaseCounts": {"0": 900, "1": 1000, "2": 270}},
     )
-    done = run(phase_repo.get_file, "ios", name)
+    done = run(labeling_repo.get_file, "ios", name)
     assert done.status == "labeled"
     assert done.label.video_bucket == "fitset-collect-labeled"
     assert done.label.phase_summary["rowPhaseCounts"]["2"] == 270
@@ -96,27 +97,27 @@ def test_collect_lifecycle_to_labeled(fresh_db):
     label = query(select(PhaseLabel).where(PhaseLabel.collect_file_id == row.id))[0]
     assert label.collect_file_id == row.id and row.label.id == label.id
 
-    run(phase_repo.set_status, "ios", name, "failed", "boom")
-    assert run(phase_repo.get_file, "ios", name).error == "boom"
+    run(labeling_repo.set_status, "ios", name, "failed", "boom")
+    assert run(labeling_repo.get_file, "ios", name).error == "boom"
 
 
 def test_promote_and_phase_model_lifecycle(fresh_db):
-    name = run(phase_repo.reserve_collect, "ios", "PUSHUP", "DEV1")
-    run(phase_repo.confirm_collect, "ios", name, 1789790030.2, 2170)
-    run(phase_repo.finish_label, 
+    name = run(labeling_repo.reserve_collect, "ios", "PUSHUP", "DEV1")
+    run(labeling_repo.confirm_collect, "ios", name, 1789790030.2, 2170)
+    run(labeling_repo.finish_label, 
         "ios", name, data_bucket="fitset-collect-labeled", data_key="ios/PUSHUP/PUSHUP_DEV1_0001.parquet",
         video_bucket="fitset-collect-labeled", video_key="v", pose_key="p", phase_summary={"rows": 2170},
     )
     promote_kw = dict(dataset_filename="PUSHUP_DEV1_0001.parquet", bucket="fitset-dataset",
                       key="ios/raw/PUSHUP/PUSHUP_DEV1_0001.parquet", phase_labeled=True)
-    dataset = run(phase_repo.reserve_promotion, "ios", name, **promote_kw)
+    dataset = run(labeling_repo.reserve_promotion, "ios", name, **promote_kw)
     assert dataset.filename == "PUSHUP_DEV1_0001.parquet" and not dataset.uploaded and dataset.phase_labeled
-    assert run(phase_repo.get_file, "ios", name).promoted_at is None
+    assert run(labeling_repo.get_file, "ios", name).promoted_at is None
     assert run(phase_repo.phase_labeled_files, "ios", "PUSHUP") == []
     assert "PUSHUP_DEV1_0001.parquet" not in run(train_repo.uploaded_filenames, "ios")
-    assert run(phase_repo.reserve_promotion, "ios", name, **promote_kw).id == dataset.id
-    run(phase_repo.complete_promotion, "ios", name)
-    entry = run(phase_repo.get_file, "ios", name)
+    assert run(labeling_repo.reserve_promotion, "ios", name, **promote_kw).id == dataset.id
+    run(labeling_repo.complete_promotion, "ios", name)
+    entry = run(labeling_repo.get_file, "ios", name)
     assert entry.dataset_file.id == dataset.id and entry.promoted_at is not None
     assert [f.filename for f in run(data_repo.list_files, "ios")] == ["PUSHUP_DEV1_0001.parquet"]
     assert [f.filename for f in run(phase_repo.phase_labeled_files, "ios", "PUSHUP")] == ["PUSHUP_DEV1_0001.parquet"]
@@ -164,8 +165,8 @@ def test_exercises_seed_and_reference(fresh_db):
     assert run(ex_repo.is_class_known, "WALL_SIT") and run(ex_repo.is_class_known, "PLANK") is False
 
     f1 = run(data_repo.reserve_admin_upload, "ios", "PUSHUP", "DEV1")[0]
-    c1 = run(phase_repo.reserve_collect, "ios", "SQUAT", "DEV1")
-    c2 = run(phase_repo.reserve_collect, "ios", "BENCH_PRESS", "DEV1")
+    c1 = run(labeling_repo.reserve_collect, "ios", "SQUAT", "DEV1")
+    c2 = run(labeling_repo.reserve_collect, "ios", "BENCH_PRESS", "DEV1")
     assert query(select(DatasetFile).where(DatasetFile.filename == f1))[0].exercise.slug == "push-up"
     assert query(select(CollectFile).where(CollectFile.filename == c1))[0].exercise.index == 0
     assert query(select(CollectFile).where(CollectFile.filename == c2))[0].exercise is None
@@ -173,12 +174,12 @@ def test_exercises_seed_and_reference(fresh_db):
 
 def test_status_hybrids_work_on_objects_and_queries(fresh_db):
     from app.phase.models import PhaseModel
-    a = run(phase_repo.reserve_collect, "ios", "PUSHUP", "DEV1")
-    b = run(phase_repo.reserve_collect, "ios", "PUSHUP", "DEV1")
-    run(phase_repo.confirm_collect, "ios", a, 1789790030.2, 10)
-    run(phase_repo.confirm_collect, "ios", b, 1789790030.2, 10)
-    run(phase_repo.mark_labeling, "ios", [b])
-    entries = {e.filename: e for e in run(phase_repo.list_files, "ios")}
+    a = run(labeling_repo.reserve_collect, "ios", "PUSHUP", "DEV1")
+    b = run(labeling_repo.reserve_collect, "ios", "PUSHUP", "DEV1")
+    run(labeling_repo.confirm_collect, "ios", a, 1789790030.2, 10)
+    run(labeling_repo.confirm_collect, "ios", b, 1789790030.2, 10)
+    run(labeling_repo.mark_labeling, "ios", [b])
+    entries = {e.filename: e for e in run(labeling_repo.list_files, "ios")}
     assert entries[a].is_labelable and not entries[a].is_labeling
     assert entries[b].is_labeling and not entries[b].is_labelable
     assert [r.filename for r in query(select(CollectFile).where(CollectFile.is_labeling))] == [b]
@@ -192,27 +193,27 @@ def test_status_hybrids_work_on_objects_and_queries(fresh_db):
 
 
 def test_delete_collect_keeps_promoted_dataset(fresh_db):
-    name = run(phase_repo.reserve_collect, "ios", "PUSHUP", "DEV1")
-    run(phase_repo.confirm_collect, "ios", name, 1789790030.2, 2170)
-    run(phase_repo.finish_label, "ios", name, data_bucket="b", data_key="d", video_bucket="b", video_key="v", pose_key="p", phase_summary={})
-    run(phase_repo.reserve_promotion, "ios", name, dataset_filename="PUSHUP_DEV1_0001.parquet", bucket="b", key="k", phase_labeled=True)
-    run(phase_repo.delete_collect, "ios", name)
-    assert run(phase_repo.get_file, "ios", name) is None
+    name = run(labeling_repo.reserve_collect, "ios", "PUSHUP", "DEV1")
+    run(labeling_repo.confirm_collect, "ios", name, 1789790030.2, 2170)
+    run(labeling_repo.finish_label, "ios", name, data_bucket="b", data_key="d", video_bucket="b", video_key="v", pose_key="p", phase_summary={})
+    run(labeling_repo.reserve_promotion, "ios", name, dataset_filename="PUSHUP_DEV1_0001.parquet", bucket="b", key="k", phase_labeled=True)
+    run(labeling_repo.delete_collect, "ios", name)
+    assert run(labeling_repo.get_file, "ios", name) is None
     assert query(select(PhaseLabel)) == []
     assert [f.filename for f in query(select(DatasetFile))] == ["PUSHUP_DEV1_0001.parquet"]
-    run(phase_repo.delete_collect, "ios", name)
+    run(labeling_repo.delete_collect, "ios", name)
 
 
 def test_change_collect_class_renames_and_resets_label(fresh_db):
-    name = run(phase_repo.reserve_collect, "ios", "PUSHUP", "DEV1")
-    run(phase_repo.confirm_collect, "ios", name, 1789790030.2, 2170)
-    run(phase_repo.reserve_collect, "ios", "SQUAT", "DEV1")
-    run(phase_repo.finish_label, "ios", name, data_bucket="b", data_key="d", video_bucket="b", video_key="v", pose_key="p", phase_summary={})
-    changed = run(phase_repo.change_collect_class, "ios", name, "SQUAT")
+    name = run(labeling_repo.reserve_collect, "ios", "PUSHUP", "DEV1")
+    run(labeling_repo.confirm_collect, "ios", name, 1789790030.2, 2170)
+    run(labeling_repo.reserve_collect, "ios", "SQUAT", "DEV1")
+    run(labeling_repo.finish_label, "ios", name, data_bucket="b", data_key="d", video_bucket="b", video_key="v", pose_key="p", phase_summary={})
+    changed = run(labeling_repo.change_collect_class, "ios", name, "SQUAT")
     assert changed.filename == "SQUAT_DEV1_0002.csv" and changed.class_name == "SQUAT"
     assert changed.csv_key == "ios/000_SQUAT/SQUAT_DEV1_0002.csv" and changed.video_key == "ios/000_SQUAT/SQUAT_DEV1_0002.mov"
     assert changed.status == "pending" and changed.label is None and changed.uploaded and changed.rows == 2170
-    assert run(phase_repo.get_file, "ios", name) is None
+    assert run(labeling_repo.get_file, "ios", name) is None
     assert query(select(PhaseLabel)) == []
 
 

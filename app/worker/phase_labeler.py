@@ -10,9 +10,9 @@ import pandas as pd
 
 from app.core import db, s3
 from app.core.config import settings
-from app.phase.models import CollectFileRead
+from app.labeling.models import CollectFileRead
 from app.motions.utils import load_motion
-from app.phase.repository import finish_label, get_file, set_status
+from app.labeling.repository import finish_label, get_file, set_status
 from app.worker import phase_algo as algo
 
 

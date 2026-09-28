@@ -12,7 +12,8 @@ from app.core.utils import utcnow, wire_alias
 
 if TYPE_CHECKING:
     from app.data.models import DatasetFile
-    from app.phase.models import CollectFile, PhaseModel
+    from app.labeling.models import CollectFile
+    from app.phase.models import PhaseModel
 
 
 ENTITY = ConfigDict(ignored_types=(hybrid_property,))
