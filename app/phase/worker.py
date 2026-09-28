@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.exercises.repository import folder_for
 from app.data.repository import dataset_locations
 from app.phase.repository import fail_phase_model, finish_phase_model
-from app.worker import phase_algo as algo
+from app.phase import algo
 
 
 async def _with_session(fn, *args, **kwargs):

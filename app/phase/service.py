@@ -57,7 +57,7 @@ def spawn_trainer(platform: str, class_name: str, model_id: int, version: str, f
     """phase_trainer 서브프로세스 시작, 종료 판정용 보관"""
     log_file = open(_trainer_log_path(platform, class_name, version), "w")
     _trainer_procs[model_id] = subprocess.Popen(
-        [sys.executable, "-u", "-m", "app.worker.phase_trainer", "--platform", platform, "--class", class_name,
+        [sys.executable, "-u", "-m", "app.phase.worker", "--platform", platform, "--class", class_name,
          "--model-id", str(model_id), "--version", version, "--files", json.dumps(filenames),
          "--window", str(window), "--stride", str(stride), "--epochs", str(epochs), "--lr", str(lr)],
         stdout=log_file,

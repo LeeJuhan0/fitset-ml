@@ -1,6 +1,7 @@
 import numpy as np
 
 from app.worker import phase_algo as algo
+from app.phase import algo as phase_algo
 
 FPS = 30.0
 
@@ -67,10 +68,10 @@ def test_row_phases_map_rows_to_frames_and_summarize():
 def test_windows_majority_and_rep_count():
     x = np.zeros((20, 6), dtype=np.float32)
     y = np.array([0] * 5 + [1] * 5 + [-1] * 5 + [2] * 5)
-    xs, ys = algo.make_windows(x, y, window=5, stride=5)
+    xs, ys = phase_algo.make_windows(x, y, window=5, stride=5)
     assert xs.shape == (3, 5, 6) and ys.tolist() == [0, 1, 2]
-    assert algo.window_label(np.array([0, 0, -1, -1, -1, -1])) == -1
-    assert algo.window_label(np.array([2, 2, 1, 1, 1])) == 1
-    assert algo.count_reps([2, 0, 0, 1, 1, 2, 0, 1, 0]) == 2
-    assert algo.count_reps([0, 0, 0]) == 0
+    assert phase_algo.window_label(np.array([0, 0, -1, -1, -1, -1])) == -1
+    assert phase_algo.window_label(np.array([2, 2, 1, 1, 1])) == 1
+    assert phase_algo.count_reps([2, 0, 0, 1, 1, 2, 0, 1, 0]) == 2
+    assert phase_algo.count_reps([0, 0, 0]) == 0
 
