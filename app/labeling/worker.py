@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.labeling.models import CollectFileRead
 from app.motions.utils import load_motion
 from app.labeling.repository import finish_label, get_file, set_status
-from app.worker import phase_algo as algo
+from app.labeling import algo
 
 
 async def _with_session(fn, *args, **kwargs):

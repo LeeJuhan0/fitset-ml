@@ -180,7 +180,7 @@ def spawn_worker(platform: str, filenames: list[str]) -> None:
     log_path = pathlib.Path(tempfile.gettempdir()) / f"phase_labeler_{platform}.log"
     log_file = open(log_path, "a")
     subprocess.Popen(
-        [sys.executable, "-m", "app.worker.phase_labeler", "--platform", platform, "--files", json.dumps(filenames)],
+        [sys.executable, "-m", "app.labeling.worker", "--platform", platform, "--files", json.dumps(filenames)],
         stdout=log_file,
         stderr=log_file,
     )

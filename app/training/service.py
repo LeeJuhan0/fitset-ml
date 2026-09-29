@@ -94,7 +94,7 @@ async def start_training(s: AsyncSession, platform: str, files: list[str], *, ep
 
     proc = subprocess.Popen(
         [
-            sys.executable, "-u", "-m", "app.worker.trainer",
+            sys.executable, "-u", "-m", "app.training.worker",
             "--platform", platform,
             "--files", json.dumps(files),
             "--epochs", str(epochs),

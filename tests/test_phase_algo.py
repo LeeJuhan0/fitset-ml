@@ -1,6 +1,6 @@
 import numpy as np
 
-from app.worker import phase_algo as algo
+from app.labeling import algo
 from app.phase import algo as phase_algo
 
 FPS = 30.0

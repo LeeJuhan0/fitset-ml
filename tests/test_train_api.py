@@ -83,7 +83,7 @@ def test_train_202_spawns_worker_and_records_run(admin_client, monkeypatch):
     assert resp.status_code == 202
     data = resp.json()["data"]
     assert (data["jobId"], data["version"], data["totalEpochs"]) == ("run-xyz", "v1.4", 50)
-    assert "app.worker.trainer" in spawned["args"] and "ios" in spawned["args"]
+    assert "app.training.worker" in spawned["args"] and "ios" in spawned["args"]
     assert "run-xyz" in train_mod._procs
     row = _row()
     assert (row.status, row.epochs, row.num_files) == ("running", 50, 1)

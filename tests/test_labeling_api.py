@@ -96,7 +96,7 @@ def test_label_spawns_worker_module(monkeypatch):
     calls = {}
     monkeypatch.setattr(labeling_mod, "subprocess", SimpleNamespace(Popen=lambda args, **kw: calls.update(args=args)))
     labeling_mod.spawn_worker("ios", ["a.csv"])
-    assert "app.worker.phase_labeler" in calls["args"] and "ios" in calls["args"]
+    assert "app.labeling.worker" in calls["args"] and "ios" in calls["args"]
 
 
 def test_label_rejects_empty(admin_client):

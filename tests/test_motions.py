@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from app.motions.utils import L, R, joint_angle, load_motion, torso_lean, torso_twist
-from app.worker.phase_labeler import motion_signal
+from app.labeling.worker import motion_signal
 
 CLASSES = sorted(p.name[:-len("_util.py")].upper() for p in pathlib.Path("app/motions").glob("*_util.py"))
 
@@ -56,7 +56,7 @@ def test_motion_signal_masks_low_visibility_and_missing_motion():
 
 @pytest.mark.parametrize("class_name", ["SQUAT", "PUSHUP"])
 def test_rep_signal_labels_down_then_up(class_name):
-    from app.worker import phase_algo as algo
+    from app.labeling import algo
     from app.phase.algo import count_reps
     fps = 30.0
     t = np.linspace(0, 1, 60, endpoint=False)
