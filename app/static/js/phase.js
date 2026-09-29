@@ -2,6 +2,10 @@ const PHASE_CLASSES = ['SQUAT', 'PUSHUP', 'DUMBBELL_CURL'];
 const MODEL_STATUS = { training: '학습 중', completed: '완료', failed: '실패' };
 let phaseModels = [];
 
+function phaseDeployed(env, cls) {
+  return deployed[env]?.phaseModels.find(p => p.class === cls);
+}
+
 async function loadPhaseModels() {
   const el = document.getElementById('phaseModelList');
   const sel = document.getElementById('phaseTrainClass');
@@ -37,7 +41,7 @@ function renderPhaseModels() {
           : '';
         return `<tr>
           <td><span class="pill class">${m.class}</span></td>
-          <td><b>${m.version}</b>${m.deployedAt ? ' <span class="pill labeled">배포 중</span>' : ''}</td>
+          <td><b>${m.version}</b>${ENVS.filter(env => phaseDeployed(env, m.class)?.latestVersion === m.version).map(env => ` <span class="pill env ${env}">${env}</span>`).join('')}</td>
           <td>${badge}</td>
           <td>${m.numFiles}</td>
           <td>${f.macroF1 ?? f.macro_f1 ?? '-'}</td>
@@ -59,31 +63,36 @@ function renderPhaseDeploy() {
   if (!classes.length) { el.innerHTML = '<p class="empty">배포할 수 있는 완료 모델이 없습니다. 렙카운트 학습 페이지에서 먼저 학습하세요</p>'; return; }
   el.innerHTML = `
     <table class="data-table">
-      <thead><tr><th>종목</th><th>배포 버전</th><th>배포 시각</th><th>버전 선택</th><th></th></tr></thead>
+      <thead><tr><th>종목</th>${ENVS.map(env => `<th>${env} 버전</th><th>${env} 배포 시각</th>`).join('')}<th>버전 선택</th><th></th></tr></thead>
       <tbody>${classes.map(c => {
-        const deployed = byClass[c].find(m => m.deployedAt);
+        const current = phaseDeployed('dev', c);
         const options = byClass[c].map(m => {
           const f = m.metrics?.final ?? {};
-          return `<option value="${m.id}" ${m === (deployed ?? byClass[c][0]) ? 'selected' : ''}>${m.version} · F1 ${f.macroF1 ?? f.macro_f1 ?? '-'} · 렙 오차 ${f.countMae ?? f.count_mae ?? '-'}</option>`;
+          const selected = current ? m.version === current.latestVersion : m === byClass[c][0];
+          return `<option value="${m.id}" ${selected ? 'selected' : ''}>${m.version} · F1 ${f.macroF1 ?? f.macro_f1 ?? '-'} · 렙 오차 ${f.countMae ?? f.count_mae ?? '-'}</option>`;
+        }).join('');
+        const envCells = ENVS.map(env => {
+          const d = phaseDeployed(env, c);
+          return d ? `<td><b>${d.latestVersion}</b></td><td>${fmtDate(d.updatedAt)}</td>`
+            : '<td><span style="color:#9CA3AF">미배포</span></td><td>-</td>';
         }).join('');
         return `<tr>
           <td><span class="pill class">${c}</span></td>
-          <td>${deployed ? `<b>${deployed.version}</b>` : '<span style="color:#9CA3AF">미배포</span>'}</td>
-          <td>${deployed ? fmtDate(deployed.deployedAt) : '-'}</td>
+          ${envCells}
           <td><select class="status-filter" id="deploySel_${c}">${options}</select></td>
-          <td><button class="btn-label" onclick="deployPhaseModel('${c}')">배포</button></td>
+          <td><div style="display:flex;gap:6px">${ENVS.map(env => `<button class="btn-label ${env}" onclick="deployPhaseModel('${c}', '${env}')">${env} 배포</button>`).join('')}</div></td>
         </tr>`;
       }).join('')}</tbody>
     </table>`;
 }
 
-async function deployPhaseModel(cls) {
+async function deployPhaseModel(cls, env) {
   const id = document.getElementById(`deploySel_${cls}`).value;
   const m = phaseModels.find(x => String(x.id) === id);
-  if (!confirm(`${cls} ${m.version} 을 배포할까요? 기존 배포는 교체됩니다`)) return;
+  if (!confirmDeploy(`${cls} ${m.version}`, env)) return;
   try {
-    await api('POST', `/phase/models/${id}/deploy`);
-    loadPhaseModels();
+    await api('POST', `/phase/models/${id}/deploy`, { env });
+    loadModelInfo();
   } catch (e) { alert(e.message); }
 }
 

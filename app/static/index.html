@@ -174,17 +174,12 @@
         </section>
 
         <section class="card" id="deploySection">
-          <div class="card-head"><h2>배포된 모델</h2></div>
+          <div class="card-head"><h2>배포된 모델 · dev / prod</h2></div>
           <div id="modelInfo"><p class="empty">로딩 중...</p></div>
-          <button class="btn btn-primary" id="deployBtn" onclick="deployModel()" style="width:100%;margin-top:14px;display:none">이 버전 배포</button>
+          <button class="btn btn-primary" id="deployBtn" onclick="deployModel()" style="width:100%;margin-top:14px;display:none">이 버전 dev 배포</button>
         </section>
       </div>
 
-      <!-- 4행: 버전 분포(가로 막대 랭킹) ─────────────────── -->
-      <section class="card version-card" id="versionSection">
-        <div class="card-head"><h2>버전 분포</h2></div>
-        <div id="versionStats"><p class="empty">로딩 중...</p></div>
-      </section>
 
 
     </div>
@@ -256,7 +251,7 @@
           <h2>렙카운트 모델 배포 · 종목마다 한 버전</h2>
           <span class="select-count" id="phaseDeployCount"></span>
         </div>
-        <p class="modal-sub">완료된 버전을 골라 배포하면 같은 종목의 기존 배포가 교체된다. 이전 버전을 다시 배포하면 롤백이다. 앱은 GET /api/v1/{platform}/phase/models/deployed 로 종목별 배포 버전을 받는다.</p>
+        <p class="modal-sub">완료된 버전을 골라 dev 또는 prod 에 배포하면 그 환경의 같은 종목 배포가 교체된다. 이전 버전을 다시 배포하면 롤백이다. dev 는 우리 실험용, prod 는 실사용자용이며 백엔드는 GET /api/v1/internal/{platform}/models/latest?env=prod 로 받는다.</p>
         <div class="table-wrap"><div id="phaseDeployList"><p class="empty">로딩 중...</p></div></div>
       </section>
     </div>

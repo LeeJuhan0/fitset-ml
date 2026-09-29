@@ -7,7 +7,6 @@ from app.core.models import Platform, ensure_platform, find_exercise
 from app.deployment.repository import add_deployment
 from app.data.models import DatasetFile, DatasetFileRead
 from app.phase import utils
-from app.core.utils import utcnow
 from app.phase.models import PhaseModel, PhaseModelFile, PhaseModelRead
 
 
@@ -63,33 +62,16 @@ async def get_phase_model(s: AsyncSession, platform: str, model_id: int) -> Phas
     return PhaseModelRead.from_row(row) if row is not None else None
 
 
-async def deploy_phase_model(s: AsyncSession, platform: str, model_id: int) -> PhaseModelRead | None:
-    """배포 표시, 같은 종목 기존 배포 해제"""
+async def deploy_phase_model(s: AsyncSession, platform: str, model_id: int, env: str) -> PhaseModelRead | None:
+    """환경별 배포 이력 기록, 최신 행이 현재 배포"""
     row = (await s.exec(select(PhaseModel).join(Platform).where(Platform.name == platform, PhaseModel.id == model_id))).first()
     if row is None:
         return None
-    others = (await s.exec(select(PhaseModel).where(
-        PhaseModel.platform_id == row.platform_id, PhaseModel.class_name == row.class_name,
-        PhaseModel.deployed_at.is_not(None), PhaseModel.id != row.id,
-    ))).all()
-    for other in others:
-        other.deployed_at = None
-        s.add(other)
-    row.deployed_at = utcnow()
-    s.add(row)
     await add_deployment(
-        s, platform, kind="phase", class_name=row.class_name, version=row.version, bucket=row.bucket,
+        s, platform, env, kind="phase", class_name=row.class_name, version=row.version, bucket=row.bucket,
         model_key=row.mlpackage_key if platform == "ios" else row.onnx_key, meta_key=row.meta_key,
     )
     return PhaseModelRead.from_row(row)
-
-
-async def deployed_phase_models(s: AsyncSession, platform: str) -> list[PhaseModelRead]:
-    """종목별 배포 모델, 종목순"""
-    rows = (await s.exec(
-        select(PhaseModel).join(Platform).where(Platform.name == platform, PhaseModel.deployed_at.is_not(None)).order_by(PhaseModel.class_name)
-    )).all()
-    return [PhaseModelRead.from_row(r) for r in rows]
 
 
 async def finish_phase_model(s: AsyncSession, model_id: int, *, keys: dict, metrics: dict, mlflow_run_id: str) -> None:

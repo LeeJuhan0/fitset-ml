@@ -23,10 +23,6 @@ def model_key(platform: str, version: str, filename: str) -> str:
     """모델 산출물 키 조립"""
     return f"{platform}/{version}/{filename}"
 
-def latest_key(platform: str) -> str:
-    """latest.json 키"""
-    return f"{platform}/latest.json"
-
 def collect_key(platform: str, folder: str, filename: str) -> str:
     """수집·라벨·모델 버킷 키 조립, folder 는 {index:03d}_{CLASS}"""
     return f"{platform}/{folder}/{filename}"

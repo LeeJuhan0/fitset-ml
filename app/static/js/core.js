@@ -29,7 +29,7 @@ let selectedFiles = new Set();
 let pollTimer = null;
 let currentJobId = null;
 let lastVersion = null;
-let deployedVersion = null;   // 현재 배포 버전 (loadModelInfo가 채움 — 이력 테이블 배지용)
+let deployed = { dev: null, prod: null };   // 환경별 현재 배포 (loadModelInfo가 채움 — 분류기·렙카운트 배지용)
 let runsData = [];            // GET /runs 결과 캐시 (배포 버전 갱신 시 재렌더용)
 let bestRunId = null;
 
@@ -43,7 +43,6 @@ function setPlatform(p) {
   loadFiles();
   loadModelInfo();
   loadRuns();
-  loadVersionStats();
   selectedVideos.clear();
   loadVideos();
   loadPhaseModels();

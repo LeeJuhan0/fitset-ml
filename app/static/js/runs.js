@@ -27,10 +27,11 @@ function renderRuns() {
         const statusBadge = r.status === 'FAILED' ? `<span class="pill failed" title="${(r.error ?? '').replace(/"/g, '&quot;')}">실패</span>`
           : r.status === 'RUNNING' ? '<span class="pill idle">학습 중</span>'
           : '<span class="pill trained">완료</span>';
-        // 배포 열: 현재 배포 버전이면 배지, 완료된 run이면 배포 버튼(롤백 포함)
-        const action = r.version === deployedVersion ? '<span class="pill deployed">배포됨</span>'
-          : r.status === 'FINISHED' ? `<button class="btn-deploy-row" onclick="deployVersion('${r.version}')">배포</button>`
-          : '';
+        // 배포 열: 환경별로 현재 배포 버전이면 배지, 완료된 run이면 배포 버튼(롤백 포함)
+        const action = ENVS.map(env => r.version === deployed[env]?.classifier?.latestVersion
+          ? `<span class="pill deployed ${env}">${env} 배포됨</span>`
+          : r.status === 'FINISHED' ? `<button class="btn-deploy-row ${env}" onclick="deployVersion('${r.version}', '${env}')">${env} 배포</button>`
+          : '').join(' ');
         return `<tr>
           <td><b>${r.version}</b>${r.runId === bestRunId ? ' <span class="pill best">BEST</span>' : ''}</td>
           <td>${statusBadge}</td>
@@ -43,21 +44,4 @@ function renderRuns() {
         </tr>`;
       }).join('')}</tbody>
     </table>`;
-}
-
-// ── 버전 분포 (오렌지 가로 막대 랭킹) ──────────────────────────────────
-async function loadVersionStats() {
-  const el = document.getElementById('versionStats');
-  try {
-    const { data } = await api('GET', '/model/version-stats');
-    if (!data.stats.length) { el.innerHTML = '<p class="empty">최근 24시간 리포트 없음</p>'; return; }
-    const maxRatio = Math.max(...data.stats.map(s => s.ratio), 0.0001);
-    el.innerHTML = data.stats.map(s => `
-      <div class="dist-row">
-        <div class="dist-bar ${s.version === data.latestVersion ? 'latest' : ''}"
-             style="width:${Math.max(10, Math.round(s.ratio / maxRatio * 78))}%">${s.version}</div>
-        <span class="dist-num">${s.count}건 · ${Math.round(s.ratio * 100)}%</span>
-      </div>`).join('')
-      + `<div class="dist-caption">최근 24시간 폴링 리포트 ${data.totalReports}건 기준 · 진한 막대 = 최신 배포 버전</div>`;
-  } catch(e) { el.innerHTML = `<p class="empty">${e.message}</p>`; }
 }

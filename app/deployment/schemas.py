@@ -1,40 +1,32 @@
+from enum import StrEnum
+
 from pydantic import AwareDatetime
 
 from app.core.schemas import CamelModel
 
 
-class DeployRequest(CamelModel):
-    """deploy 바디, version"""
+class DeployEnv(StrEnum):
+    """배포 환경, dev 실험용, prod 실사용자용"""
+    DEV = "dev"
+    PROD = "prod"
+
+
+class DeployEnvRequest(CamelModel):
+    """배포 대상 환경 바디"""
+    env: DeployEnv
+
+
+class DeployRequest(DeployEnvRequest):
+    """분류 deploy 바디, version 과 env"""
     version: str
 
 
 class DeployResponse(CamelModel):
-    """deploy 응답, 배포 버전 시각"""
+    """deploy 응답, 환경 배포 버전 시각"""
     deployed_version: str
     platform: str
+    env: DeployEnv
     deployed_at: str
-
-
-class ModelLatestResponse(CamelModel):
-    """latest 응답, 버전 URL 최신 여부"""
-    latest_version: str
-    model_url: str
-    meta_url: str
-    is_up_to_date: bool
-
-
-class VersionStatItem(CamelModel):
-    """버전 분포 항목, count ratio"""
-    version: str
-    count: int
-    ratio: float
-
-
-class VersionStatsResponse(CamelModel):
-    """version-stats 응답, 분포 목록"""
-    latest_version: str | None = None
-    total_reports: int
-    stats: list[VersionStatItem]
 
 
 class InternalModelItem(CamelModel):
@@ -51,6 +43,12 @@ class InternalPhaseModelItem(InternalModelItem):
 
 
 class InternalModelsResponse(CamelModel):
-    """인터널 최신 모델 응답, 분류와 종목별 렙카운팅"""
+    """인터널 최신 모델 응답, 환경별 분류와 렙카운팅"""
+    env: DeployEnv
     classifier: InternalModelItem | None = None
     phase_models: list[InternalPhaseModelItem]
+
+
+class InternalModelsRequest(CamelModel):
+    """인터널 조회 쿼리, env 필수"""
+    env: DeployEnv

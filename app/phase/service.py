@@ -22,7 +22,6 @@ from app.phase.models import PhaseModelRead
 from app.phase.repository import (
     create_phase_model,
     deploy_phase_model,
-    deployed_phase_models,
     fail_phase_model,
     get_phase_model,
     list_phase_models,
@@ -105,16 +104,12 @@ async def model_download_url(s: AsyncSession, platform: str, model_id: int, fmt:
     return ModelUrlResponse(model_id=model_id, format=fmt, url=presigned_get_url(model.bucket, key, GET_EXPIRES_SECONDS), expires_in=GET_EXPIRES_SECONDS)
 
 
-async def deploy_model(s: AsyncSession, platform: str, model_id: int) -> PhaseModelRead:
-    """렙카운팅 모델 배포, 롤백 겸용, 미완성이나 플랫폼 파일 없으면 404"""
+async def deploy_model(s: AsyncSession, platform: str, model_id: int, env: str) -> PhaseModelRead:
+    """렙카운팅 모델 환경별 배포, 롤백 겸용, 파일 없으면 404"""
     model = await get_phase_model(s, platform, model_id)
     if model is None or not model.can_download:
         raise ModelArtifactNotFoundError()
     if (model.mlpackage_key if platform == "ios" else model.onnx_key) is None:
         raise ModelArtifactNotFoundError()
-    return await deploy_phase_model(s, platform, model_id)
+    return await deploy_phase_model(s, platform, model_id, env)
 
-
-async def deployed_models(s: AsyncSession, platform: str) -> ListModelsResponse:
-    """종목별 배포된 렙카운팅 모델"""
-    return ListModelsResponse(platform=platform, models=await deployed_phase_models(s, platform))

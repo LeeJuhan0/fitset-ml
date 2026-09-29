@@ -9,7 +9,7 @@ ADMIN_PATHS = [
     ("get", "/api/v1/ios/data"),
     ("get", "/api/v1/ios/runs"),
     ("post", "/api/v1/ios/deploy"),
-    ("get", "/api/v1/ios/model/version-stats"),
+    ("get", "/api/v1/ios/models/deployed?env=dev"),
 ]
 
 

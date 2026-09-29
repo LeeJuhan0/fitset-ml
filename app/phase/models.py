@@ -37,7 +37,6 @@ class PhaseModelBase(SQLModel):
     metrics: dict[str, Any] = Field(default_factory=dict, sa_type=JSON, description="acc, f1, macro_f1, count_mae, per_file")
     mlflow_run_id: str | None = Field(default=None, max_length=64)
     error: str | None = Field(default=None, sa_type=Text, description="워커 실패 사유")
-    deployed_at: AwareDatetime | None = Field(default=None, sa_type=UTCDateTime6, description="배포 시각, 종목마다 하나만 값 있음")
 
     @hybrid_property
     def is_training(self) -> bool:

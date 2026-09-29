@@ -242,6 +242,10 @@ th.sorted .sort-ic { color: var(--blue); }
 }
 .btn-deploy-row:hover { background: var(--orange-soft); }
 .pill.deployed { background: var(--orange-soft); color: var(--orange-deep); }
+.pill.env.dev, .pill.deployed.dev { background: #DBEAFE; color: var(--blue); }
+.pill.env.prod, .pill.deployed.prod { background: #FEE2E2; color: var(--red); }
+.btn-deploy-row.prod { border-color: var(--red); color: var(--red); }
+.btn-deploy-row.prod:hover { background: #FEE2E2; }
 .pill.best { background: #FEF3C7; color: #B45309; }
 .pill.failed { background: #FEE2E2; color: #DC2626; }
 .train-error { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: #FEE2E2; color: #B91C1C; font-size: 12px; white-space: pre-wrap; max-height: 160px; overflow: auto; }
@@ -266,18 +270,7 @@ th.sorted .sort-ic { color: var(--blue); }
 .btn-secondary:hover:not(:disabled) { border-color: var(--gray-light); color: var(--ink); }
 .deployed-version { font-size: 34px; font-weight: 800; color: var(--orange-deep); letter-spacing: -.02em; }
 .deployed-url { font-size: 11px; color: var(--gray-light); word-break: break-all; margin-top: 6px; }
-
-/* ── 버전 분포: 오렌지 그라데이션 가로 막대 랭킹 ── */
-.version-card { grid-column: 1 / -1; }
-.dist-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-.dist-bar {
-  height: 34px; border-radius: 9px; background: linear-gradient(90deg, #F0A93E, #F7CE85);
-  display: flex; align-items: center; padding: 0 12px; min-width: 64px;
-  color: #6b4a12; font-weight: 700; font-size: 12.5px; white-space: nowrap;
-}
-.dist-bar.latest { background: linear-gradient(90deg, #E08F13, #F0A93E); color: #fff; }
-.dist-num { color: var(--gray); font-size: 12.5px; white-space: nowrap; }
-.dist-caption { font-size: 12px; color: var(--gray-light); margin-top: 12px; }
+.env-row + .env-row { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
 
 .video-card { grid-column: 1 / -1; padding: 24px 24px 16px; }
 .status-filter {
@@ -293,6 +286,8 @@ th.sorted .sort-ic { color: var(--blue); }
 .btn-label:hover:not(:disabled) { filter: brightness(.96); }
 .btn-label:disabled { opacity: .35; cursor: default; }
 .btn-label.promote { background: var(--blue); margin-left: 0; }
+.btn-label.dev { background: var(--blue); }
+.btn-label.prod { background: var(--red); }
 .pill.promoted { background: #DBEAFE; color: #1D4ED8; }
 .dl-btn {
   padding: 3px 9px; font-size: 11.5px; border-radius: 999px; border: 1px solid var(--tline);

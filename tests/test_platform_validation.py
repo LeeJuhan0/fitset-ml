@@ -3,10 +3,9 @@ import pytest
 from conftest import async_
 
 ENDPOINTS = [
-    ("admin_client", "get", "/api/v1/{p}/model/latest"),
+    ("admin_client", "get", "/api/v1/{p}/models/deployed?env=dev"),
     ("admin_client", "get", "/api/v1/{p}/data"),
     ("admin_client", "get", "/api/v1/{p}/train/status?jobId=x"),
-    ("admin_client", "get", "/api/v1/{p}/model/version-stats"),
     ("admin_client", "get", "/api/v1/{p}/runs"),
 ]
 

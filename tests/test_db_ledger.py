@@ -2,6 +2,7 @@ from sqlmodel import select
 
 import app.data.repository as data_repo
 import app.labeling.repository as labeling_repo
+import app.deployment.repository as dep_repo
 import app.phase.repository as phase_repo
 import app.training.repository as train_repo
 from app.core import db
@@ -140,11 +141,11 @@ def test_promote_and_phase_model_lifecycle(fresh_db):
 
     newer = run(phase_repo.create_phase_model, "ios", "PUSHUP", "v1.1", ["PUSHUP_DEV1_0001.parquet"], window=50, stride=5, epochs=3)
     run(phase_repo.finish_phase_model, newer.id, keys={"pt_key": "n.pt", "mlpackage_key": "n.zip"}, metrics={}, mlflow_run_id="run2")
-    assert run(phase_repo.deploy_phase_model, "ios", model.id).deployed_at is not None
-    assert run(phase_repo.deploy_phase_model, "ios", newer.id).deployed_at is not None
-    assert [(m.version, m.class_name) for m in run(phase_repo.deployed_phase_models, "ios")] == [("v1.1", "PUSHUP")]
-    assert run(phase_repo.get_phase_model, "ios", model.id).deployed_at is None
-    assert run(phase_repo.deploy_phase_model, "android", model.id) is None
+    assert run(phase_repo.deploy_phase_model, "ios", model.id, "prod").version == "v1.0"
+    assert run(phase_repo.deploy_phase_model, "ios", newer.id, "dev").version == "v1.1"
+    assert [(r.version, r.model_key) for r in run(dep_repo.latest_deployments, "ios", "dev")] == [("v1.1", "n.zip")]
+    assert [(r.version, r.model_key) for r in run(dep_repo.latest_deployments, "ios", "prod")] == [("v1.0", "k.zip")]
+    assert run(phase_repo.deploy_phase_model, "android", model.id, "dev") is None
     assert run(phase_repo.list_phase_models, "ios", "SQUAT") == [] and len(run(phase_repo.list_phase_models, "ios")) == 2
 
 
