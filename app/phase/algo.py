@@ -2,6 +2,9 @@ import itertools
 
 import numpy as np
 
+MIN_RUN = 3
+PEAK_MIN_RUN = 1
+
 
 def window_label(y: np.ndarray, num_classes: int = 2) -> int:
     """윈도우 라벨, 범위 밖 제외 다수결, 유효 절반 미만이면 -1"""
@@ -24,6 +27,15 @@ def make_windows(x: np.ndarray, y: np.ndarray, window: int, stride: int) -> tupl
 
 
 def count_reps(seq: list[int]) -> int:
-    """렙 수, 0·1 구간 수 중 작은 쪽"""
-    runs = [k for k, _ in itertools.groupby(seq)]
-    return min(runs.count(0), runs.count(1))
+    """렙 수, 피크 0 구간 개수"""
+    return [k for k, _ in itertools.groupby(seq)].count(0)
+
+
+def smooth_runs(seq: list[int], min_run: int = MIN_RUN, peak_min_run: int = PEAK_MIN_RUN) -> list[int]:
+    """짧은 구간 앞 구간 흡수, 피크 0.1초, 나머지 0.3초"""
+    out: list[int] = []
+    for value, group in itertools.groupby(seq):
+        n = len(list(group))
+        need = peak_min_run if value == 0 else min_run
+        out += [out[-1] if out and n < need else value] * n
+    return out

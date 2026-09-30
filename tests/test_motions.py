@@ -55,7 +55,7 @@ def test_motion_signal_masks_low_visibility_and_missing_motion():
 
 
 @pytest.mark.parametrize("class_name", ["SQUAT", "PUSHUP"])
-def test_rep_signal_labels_down_then_up(class_name):
+def test_rep_signal_labels_peaks(class_name):
     from app.labeling import algo
     from app.phase.algo import count_reps
     fps = 30.0
@@ -63,4 +63,4 @@ def test_rep_signal_labels_down_then_up(class_name):
     angle = np.concatenate([np.full(45, 170.0), np.tile(170 - 100 * (1 - np.cos(2 * np.pi * t)) / 2, 3), np.full(45, 170.0)])
     phase = algo.phases_from_angles(angle, fps, load_motion(class_name).DOWN_IS_DECREASING)
     moves = [k for k in phase if k in (0, 1)]
-    assert moves[0] == 0 and count_reps(phase.tolist()) == 3
+    assert moves[0] == 1 and count_reps(phase.tolist()) == 3
