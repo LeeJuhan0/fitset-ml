@@ -176,6 +176,13 @@ async def finish_label(s: AsyncSession, platform: str, filename: str, *, data_bu
     s.add(row)
 
 
+async def update_phase_summary(s: AsyncSession, platform: str, filename: str, phase_summary: dict) -> None:
+    """구간 수정 후 요약 갱신"""
+    row = await _row(s, platform, filename)
+    row.label.phase_summary = phase_summary
+    s.add(row.label)
+
+
 async def reserve_promotion(s: AsyncSession, platform: str, filename: str, *, dataset_filename: str, bucket: str, key: str, phase_labeled: bool) -> DatasetFileRead:
     """승격 1단계, uploaded False 행 선점, 재시도면 기존 행"""
     row = await _row(s, platform, filename)

@@ -290,3 +290,21 @@ def test_change_class_rewrites_label_and_blocks_after_promotion(admin_client, mo
     assert patch("nope.csv").status_code == 404
     assert patch("PUSHUP_DEV1_0001.csv", "PLANK").status_code == 400
     assert len(copied) == 2
+
+
+def test_edit_phases_rewrites_label(admin_client, monkeypatch):
+    label = PhaseLabelRead(data_bucket="b", data_key="k", video_bucket="b", video_key="v", pose_key="p",
+                           phase_summary={"fps": 30.0, "repCount": 0}, labeled_at="2026-09-22T01:00:00+00:00")
+    monkeypatch.setattr(labeling_mod, "get_file", async_(lambda s, p, f: _entry(status="labeled", label=label)))
+    monkeypatch.setattr(labeling_mod, "read_pose", lambda b, k: {"fps": 30.0, "frames": [[2, None]] * 4})
+    written, saved = {}, {}
+    monkeypatch.setattr(labeling_mod, "_rewrite_phases", lambda e, pose, phases: written.update(phases=phases) or [0, 0, 1, 1])
+    monkeypatch.setattr(labeling_mod, "update_phase_summary", async_(lambda s, p, f, summary: saved.update(summary)))
+
+    resp = admin_client.patch("/api/v1/ios/phase/files/phases", json={"filename": "PUSHUP_DEV1_0001.csv", "phases": [0, 0, 1, 1]})
+    assert resp.status_code == 200
+    assert written["phases"] == [0, 0, 1, 1]
+    assert saved["repCount"] == 1 and saved["rowPhaseCounts"] == {"0": 2, "1": 2} and saved["edited"] is True
+
+    assert admin_client.patch("/api/v1/ios/phase/files/phases", json={"filename": "PUSHUP_DEV1_0001.csv", "phases": [0, 1]}).status_code == 409
+    assert admin_client.patch("/api/v1/ios/phase/files/phases", json={"filename": "PUSHUP_DEV1_0001.csv", "phases": [0, 5, 1, 1]}).status_code in (400, 422)

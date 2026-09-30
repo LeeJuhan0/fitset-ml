@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import model_validator
 
@@ -35,6 +35,12 @@ class ChangeClassRequest(CamelModel):
     """종목 변경 바디, filename, class"""
     filename: str
     class_name: str = Field(alias="class")
+
+
+class EditPhasesRequest(CamelModel):
+    """구간 수정 바디, filename, 프레임별 phase"""
+    filename: str
+    phases: list[Annotated[int, Field(ge=-1, le=2)]]
 
 
 class DeleteFileResponse(CamelModel):

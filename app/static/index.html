@@ -284,6 +284,15 @@
       <div class="phase-badge" id="phaseBadge" style="display:none"></div>
     </div>
     <div class="phase-strip" id="phaseStrip" onclick="seekFromStrip(event)"></div>
+    <div class="phase-edit-bar" id="phaseEditBar" style="display:none">
+      <button class="dl-btn" id="phaseEditToggle" onclick="toggleEdit()">구간 편집</button>
+      <span id="phaseEditTools" style="display:none">
+        <button class="dl-btn" onclick="splitAtCurrent()">현재 위치에서 나누기</button>
+        <button class="dl-btn" onclick="resetEdit()">되돌리기</button>
+        <button class="dl-btn" onclick="savePhases()">저장</button>
+        <span class="edit-hint">경계 드래그로 범위 조절, 구간 더블클릭으로 0/1 전환</span>
+      </span>
+    </div>
     <div class="phase-legend">
       <span><i style="background:#2563EB"></i>0 내려감</span>
       <span><i style="background:#16A34A"></i>1 올라감</span>

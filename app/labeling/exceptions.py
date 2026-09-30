@@ -65,3 +65,14 @@ class ClassChangeBlockedError(HTTPException):
             status_code=status.HTTP_409_CONFLICT,
             detail=f"종목을 바꿀 수 없습니다({reason}): {filename}",
         )
+
+
+class PhaseEditBlockedError(HTTPException):
+    """승격, 라벨링 중이거나 프레임 수 불일치라 구간 수정 불가"""
+
+    def __init__(self, filename: str, reason: str):
+        """상태코드와 detail 고정"""
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"구간을 수정할 수 없습니다({reason}): {filename}",
+        )

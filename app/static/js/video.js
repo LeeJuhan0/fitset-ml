@@ -3,6 +3,9 @@ const POSE_EDGES = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,
 const PHASE_NAME = { 0: '내려감', 1: '올라감', 2: '멈춤' };
 let poseData = null;
 let poseRaf = null;
+let editing = false;
+let originalPhases = null;
+let editFilename = null;
 
 async function openVideo(filename) {
   const f = videoFiles.find(x => x.filename === filename);
@@ -12,7 +15,10 @@ async function openVideo(filename) {
   document.getElementById('videoSub').textContent = `${f.class} · ${STATUS_LABEL[f.status] ?? f.status}` + (f.label ? '' : ' · 라벨링 후 관절·구간이 표시됩니다');
   document.getElementById('phaseStrip').innerHTML = '';
   document.getElementById('phaseBadge').style.display = 'none';
+  document.getElementById('phaseEditBar').style.display = 'none';
   poseData = null;
+  editFilename = filename;
+  setEditing(false);
   modal.classList.add('visible');
   try {
     const { data } = await api('GET', `/phase/video-url?filename=${encodeURIComponent(filename)}`);
@@ -20,8 +26,10 @@ async function openVideo(filename) {
     if (f.label) {
       const pose = await api('GET', `/phase/pose?filename=${encodeURIComponent(filename)}`);
       poseData = pose.data;
+      originalPhases = poseData.frames.map(fr => fr[0]);
       renderPhaseStrip();
       document.getElementById('phaseBadge').style.display = 'flex';
+      document.getElementById('phaseEditBar').style.display = 'flex';
       drawLoop();
     }
   } catch (e) { document.getElementById('videoSub').textContent = `불러오기 실패: ${e.message}`; }
@@ -87,6 +95,100 @@ function renderPhaseStrip() {
     segs.push([frames[start][0], i - start]); start = i;
   }
   strip.innerHTML = segs.map(([p, n]) => `<div class="${p >= 0 ? 'p' + p : 'pn'}" style="width:${(n / frames.length) * 100}%"></div>`).join('');
+  if (!editing) return;
+  let pos = 0;
+  segs.slice(0, -1).forEach(([, n]) => {
+    pos += n;
+    const h = document.createElement('div');
+    h.className = 'phase-handle';
+    h.style.left = `${(pos / frames.length) * 100}%`;
+    h.dataset.frame = pos;
+    h.onclick = e => e.stopPropagation();
+    h.onpointerdown = startDrag;
+    strip.appendChild(h);
+  });
+  strip.querySelectorAll(':scope > div:not(.phase-handle)').forEach(el => el.ondblclick = togglePhaseAt);
+}
+
+function segmentAt(frame) {
+  const frames = poseData.frames;
+  let lo = frame, hi = frame + 1;
+  while (lo > 0 && frames[lo - 1][0] === frames[frame][0]) lo--;
+  while (hi < frames.length && frames[hi][0] === frames[frame][0]) hi++;
+  return [lo, hi];
+}
+
+function setPhases(lo, hi, phase) {
+  for (let i = lo; i < hi; i++) poseData.frames[i][0] = phase;
+}
+
+function frameFromEvent(event) {
+  const rect = document.getElementById('phaseStrip').getBoundingClientRect();
+  const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+  return Math.round(ratio * poseData.frames.length);
+}
+
+function startDrag(event) {
+  event.stopPropagation();
+  const b = Number(event.currentTarget.dataset.frame);
+  const left = poseData.frames[b - 1][0], right = poseData.frames[b][0];
+  const lo = segmentAt(b - 1)[0], hi = segmentAt(b)[1];
+  const video = document.getElementById('viewerVideo');
+  video.pause();
+  const move = e => {
+    const f = Math.min(hi - 1, Math.max(lo + 1, frameFromEvent(e)));
+    setPhases(lo, f, left);
+    setPhases(f, hi, right);
+    video.currentTime = f / poseData.fps;
+    renderPhaseStrip();
+  };
+  const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+function togglePhaseAt(event) {
+  const frame = Math.min(poseData.frames.length - 1, frameFromEvent(event));
+  const [lo, hi] = segmentAt(frame);
+  setPhases(lo, hi, poseData.frames[frame][0] === 0 ? 1 : 0);
+  renderPhaseStrip();
+}
+
+function splitAtCurrent() {
+  const frame = currentFrame();
+  const [lo, hi] = segmentAt(frame);
+  if (frame === lo) return;
+  setPhases(frame, hi, poseData.frames[frame][0] === 0 ? 1 : 0);
+  renderPhaseStrip();
+}
+
+function setEditing(on) {
+  editing = on;
+  document.getElementById('phaseStrip').classList.toggle('editing', on);
+  document.getElementById('phaseEditTools').style.display = on ? 'inline' : 'none';
+  document.getElementById('phaseEditToggle').textContent = on ? '편집 종료' : '구간 편집';
+}
+
+function toggleEdit() {
+  setEditing(!editing);
+  renderPhaseStrip();
+}
+
+function resetEdit() {
+  poseData.frames.forEach((fr, i) => fr[0] = originalPhases[i]);
+  renderPhaseStrip();
+}
+
+async function savePhases() {
+  const phases = poseData.frames.map(fr => fr[0]);
+  try {
+    await api('PATCH', '/phase/files/phases', { filename: editFilename, phases });
+    originalPhases = phases;
+    setEditing(false);
+    renderPhaseStrip();
+    loadVideos();
+    alert('구간을 저장했습니다');
+  } catch (e) { alert(e.message); }
 }
 
 function seekFromStrip(event) {

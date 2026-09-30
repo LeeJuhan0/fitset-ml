@@ -21,13 +21,14 @@ from app.labeling.schemas import (
 )
 from app.core import s3
 from app.core.config import settings
-from app.labeling import utils
+from app.labeling import algo, utils
 from app.labeling.exceptions import (
     ClassChangeBlockedError,
     CollectFileBusyError,
     CollectFileNotFoundError,
     EmptyFilenamesError,
     InvalidVideoStartError,
+    PhaseEditBlockedError,
     PoseNotReadyError,
 )
 from app.data.exceptions import InvalidDeviceIdError, ReservationNotFoundError, UnsupportedClassError
@@ -47,6 +48,7 @@ from app.labeling.repository import (
     read_pose,
     reserve_collect,
     reserve_promotion,
+    update_phase_summary,
 )
 
 PUT_EXPIRES_SECONDS = 600
@@ -209,6 +211,45 @@ async def pose(s: AsyncSession, platform: str, filename: str) -> PoseResponse:
         raise PoseNotReadyError(filename)
     data = await asyncio.to_thread(read_pose, entry.label.data_bucket, entry.label.pose_key)
     return PoseResponse(filename=filename, fps=data["fps"], frames=data["frames"])
+
+
+def _rewrite_phases(entry: CollectFileRead, pose_data: dict, phases: list[int]) -> list[int]:
+    """pose.json 프레임 phase 와 parquet phase 열 덮어쓰기"""
+    import numpy as np
+    import pandas as pd
+
+    label = entry.label
+    with tempfile.TemporaryDirectory() as workdir:
+        data_path = pathlib.Path(workdir) / "data.parquet"
+        s3.download_object(label.data_bucket, label.data_key, str(data_path))
+        df = pd.read_parquet(data_path)
+        row_phase = algo.row_phases(df["timestamp"].to_numpy(dtype=float), np.array(phases), pose_data["fps"], float(entry.video_start))
+        df["phase"] = np.array(row_phase, dtype=np.int8)
+        df.to_parquet(data_path, index=False)
+        pose_data["frames"] = [[p, lm] for p, (_, lm) in zip(phases, pose_data["frames"])]
+        pose_path = pathlib.Path(workdir) / "pose.json"
+        pose_path.write_text(json.dumps(pose_data))
+        s3.upload_object(label.data_bucket, label.data_key, str(data_path), CONTENT_TYPES["parquet"])
+        s3.upload_object(label.data_bucket, label.pose_key, str(pose_path), "application/json")
+    return row_phase
+
+
+async def edit_phases(s: AsyncSession, platform: str, filename: str, phases: list[int]) -> CollectFileRead:
+    """구간 수동 수정, 프레임별 phase 로 pose parquet 요약 갱신"""
+    entry = await get_file(s, platform, filename)
+    if entry is None or entry.label is None:
+        raise PoseNotReadyError(filename)
+    reason = utils.class_change_block_reason(entry)
+    if reason is not None:
+        raise PhaseEditBlockedError(filename, reason)
+    pose_data = await asyncio.to_thread(read_pose, entry.label.data_bucket, entry.label.pose_key)
+    if len(phases) != len(pose_data["frames"]):
+        raise PhaseEditBlockedError(filename, f"프레임 수 {len(pose_data['frames'])}개와 다름")
+    row_phase = await asyncio.to_thread(_rewrite_phases, entry, pose_data, phases)
+    summary = {**entry.label.phase_summary, **algo.phase_counts(row_phase), "edited": True}
+    await update_phase_summary(s, platform, filename, summary)
+    await s.commit()
+    return await get_file(s, platform, filename)
 
 
 def _copy_to_dataset(entry: CollectFileRead, key: str) -> str:

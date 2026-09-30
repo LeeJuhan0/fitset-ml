@@ -91,15 +91,22 @@ def row_phases(timestamps: np.ndarray, phase: np.ndarray, fps: float, video_star
     return out
 
 
-def summarize(angles: np.ndarray, fps: float, row_phase: list[int]) -> dict:
-    """라벨링 요약, 프레임 수, 검출 비율, phase 행 수"""
+def phase_counts(row_phase: list[int]) -> dict:
+    """렙 수, 행 수, phase 별 행 수"""
     values, counts = np.unique(np.array(row_phase, dtype=int), return_counts=True)
     return {
         "repCount": count_reps([p for p in row_phase if p >= 0]),
+        "rows": len(row_phase),
+        "rowPhaseCounts": {str(int(v)): int(c) for v, c in zip(values, counts)},
+    }
+
+
+def summarize(angles: np.ndarray, fps: float, row_phase: list[int]) -> dict:
+    """라벨링 요약, 프레임 수, 검출 비율, phase 행 수"""
+    return {
         "frames": int(len(angles)),
         "fps": round(float(fps), 2),
         "videoSeconds": round(len(angles) / fps, 1),
         "detectedFraction": round(float(np.mean(~np.isnan(angles))), 3),
-        "rows": len(row_phase),
-        "rowPhaseCounts": {str(int(v)): int(c) for v, c in zip(values, counts)},
+        **phase_counts(row_phase),
     }

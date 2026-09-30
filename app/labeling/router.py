@@ -11,6 +11,7 @@ from app.labeling.models import CollectFileRead
 from app.labeling.schemas import (
     ChangeClassRequest,
     DeleteFileResponse,
+    EditPhasesRequest,
     LabelResponse,
     LabelRequest,
     ListFilesResponse,
@@ -78,6 +79,17 @@ async def change_class(
 ):
     """종목 변경, 파일명 재채번, 라벨 초기화, 승격 후 409"""
     return ApiResponse(trace_id=trace_id, data=await service.change_class(session, platform, payload.filename, payload.class_name))
+
+
+@router.patch("/{platform}/phase/files/phases", response_model=ApiResponse[CollectFileRead])
+async def edit_phases(
+    session: DbSessionDep,
+    payload: EditPhasesRequest,
+    platform: str = Depends(validate_platform),
+    trace_id: str = Depends(get_trace_id),
+):
+    """구간 수동 수정, 프레임별 phase, 승격 후 409"""
+    return ApiResponse(trace_id=trace_id, data=await service.edit_phases(session, platform, payload.filename, payload.phases))
 
 
 @router.post("/{platform}/phase/label", response_model=ApiResponse[LabelResponse], status_code=202)

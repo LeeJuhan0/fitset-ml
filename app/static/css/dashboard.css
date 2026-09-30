@@ -318,6 +318,11 @@ th.sorted .sort-ic { color: var(--blue); }
 .phase-strip div { height: 100%; }
 .phase-strip .p0 { background: #2563EB; } .phase-strip .p1 { background: #16A34A; }
 .phase-strip .p2 { background: #9CA3AF; } .phase-strip .pn { background: #FCA5A5; }
+.phase-strip.editing { position: relative; overflow: visible; height: 22px; }
+.phase-handle { position: absolute; top: -4px; width: 10px; height: 30px; margin-left: -5px; border-radius: 4px;
+  background: #fff; border: 2px solid #1F2328; cursor: ew-resize; touch-action: none; }
+.phase-edit-bar { display: flex; align-items: center; gap: 4px; margin-top: 10px; font-size: 12px; }
+.phase-edit-bar .edit-hint { color: var(--gray); margin-left: 6px; }
 .phase-legend { display: flex; gap: 14px; font-size: 12px; color: var(--gray); margin-top: 8px; }
 .phase-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
 
