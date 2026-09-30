@@ -25,7 +25,7 @@ from app.worker.model_def import FitSetModel
 from app.worker.preprocess import CHANNELS, load_table
 
 NUM_CLASSES = 2
-CLASS_NAMES = ["peak", "other"]
+CLASS_NAMES = ["down", "up"]
 INFER_STRIDE = 10
 VAL_FRAC = 0.2
 BATCH = 64
@@ -106,7 +106,7 @@ def evaluate(model, files, mean, std, window: int, device) -> dict:
             fp[c] += int(((pred == c) & (ys != c)).sum())
             fn[c] += int(((pred != c) & (ys == c)).sum())
         gt = algo.count_reps([int(v) for v in y if v >= 0])
-        pr = algo.count_reps(algo.smooth_runs(infer_sequence(model, x, mean, std, window, device)))
+        pr = algo.count_reps(infer_sequence(model, x, mean, std, window, device))
         per_file[name] = {"label_count": gt, "model_count": pr}
     f1 = 2 * tp / np.maximum(2 * tp + fp + fn, 1)
     errs = [abs(v["label_count"] - v["model_count"]) for v in per_file.values()]

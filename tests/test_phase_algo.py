@@ -23,22 +23,18 @@ def _segments(phase):
     return out
 
 
-def test_pushup_peak_zero_near_bottom_rest_one():
+def test_pushup_only_down_up_switching_at_turns():
     angles = _reps()
     phase = algo.phases_from_angles(angles, FPS, down_is_decreasing=True)
     assert set(phase.tolist()) == {0, 1}
-    assert _segments(phase) == [1, 0] * 4 + [1]
+    assert _segments(phase) == [0, 1] * 4
     bottom = int(1.5 * FPS + FPS)
-    assert (phase[bottom - 6:bottom + 7] == 0).all()
-    assert phase[bottom - 15] == 1 and phase[bottom + 15] == 1
-    assert phase_algo.count_reps(phase.tolist()) == 4
+    assert phase[bottom - 3] == 0 and phase[bottom + 3] == 1
 
 
 def test_curl_direction_is_inverted():
     phase = algo.phases_from_angles(_reps(), FPS, down_is_decreasing=False)
-    bottom = int(1.5 * FPS + FPS)
-    assert phase[bottom] == 1
-    assert phase[int(1.5 * FPS + 2 * FPS)] == 0
+    assert _segments(phase)[:2] == [1, 0]
 
 
 def test_small_swing_and_undetected_is_minus_one():
@@ -75,12 +71,5 @@ def test_windows_majority_and_rep_count():
     assert phase_algo.window_label(np.array([0, 0, -1, -1, -1, -1])) == -1
     assert phase_algo.window_label(np.array([0, 0, 1, 1, 1])) == 1
     assert phase_algo.count_reps([1, 0, 0, 1, 1, 0, 1, 0]) == 3
-    assert phase_algo.count_reps([0, 0, 0]) == 1
-    assert phase_algo.count_reps([1, 1]) == 0
-
-
-def test_smooth_runs_keeps_short_peak_absorbs_short_other():
-    assert phase_algo.smooth_runs([1, 1, 1, 0, 1, 1, 1]) == [1, 1, 1, 0, 1, 1, 1]
-    assert phase_algo.smooth_runs([0, 0, 0, 1, 1, 0, 0]) == [0] * 7
-    assert phase_algo.smooth_runs([1, 1, 1, 0, 0], peak_min_run=3) == [1] * 5
+    assert phase_algo.count_reps([0, 0, 0]) == 0
 
