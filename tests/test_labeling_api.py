@@ -200,7 +200,7 @@ def test_computed_flags_in_files_response(admin_client, monkeypatch):
     ]))
     files = {f["filename"]: f for f in admin_client.get("/api/v1/ios/phase/files").json()["data"]["files"]}
     assert files["PUSHUP_DEV1_0001.csv"]["canLabel"] and files["PUSHUP_DEV1_0001.csv"]["canPromote"]
-    assert not files["PUSHUP_DEV1_0002.csv"]["canLabel"] and files["PUSHUP_DEV1_0002.csv"]["canPromote"]
+    assert files["PUSHUP_DEV1_0002.csv"]["canLabel"] and files["PUSHUP_DEV1_0002.csv"]["canPromote"]
     assert files["PUSHUP_DEV1_0002.csv"]["label"]["hasPhase"] is True
     assert files["DEADLIFT_DEV1_0001.csv"]["canLabel"] and files["DEADLIFT_DEV1_0001.csv"]["canPromote"]
     assert not files["PUSHUP_DEV1_0003.csv"]["canLabel"] and not files["PUSHUP_DEV1_0003.csv"]["canPromote"]
@@ -308,3 +308,30 @@ def test_edit_phases_rewrites_label(admin_client, monkeypatch):
 
     assert admin_client.patch("/api/v1/ios/phase/files/phases", json={"filename": "PUSHUP_DEV1_0001.csv", "phases": [0, 1]}).status_code == 409
     assert admin_client.patch("/api/v1/ios/phase/files/phases", json={"filename": "PUSHUP_DEV1_0001.csv", "phases": [0, 5, 1, 1]}).status_code in (400, 422)
+
+
+def test_relabel_reads_labeled_objects_and_refreshes_promoted_copy(monkeypatch, tmp_path):
+    import numpy as np
+    import pandas as pd
+    import app.labeling.worker as worker
+
+    entry = _entry(status="labeled", label=_label()).model_copy(update={"dataset_file": _dataset()})
+    src = pd.DataFrame({"timestamp": [1789790030.2 + i / 30 for i in range(4)], "ax": 0.0, "phase": 2})
+    ops = []
+
+    def download(bucket, key, path):
+        ops.append(("get", bucket, key))
+        if key.endswith(".parquet"):
+            src.to_parquet(path)
+    monkeypatch.setattr(worker.s3, "download_object", download)
+    monkeypatch.setattr(worker.s3, "upload_object", lambda b, k, p, t: ops.append(("put", b, k)))
+    monkeypatch.setattr(worker.s3, "copy_object", lambda sb, k, db_, dk=None: ops.append(("copy", sb, k, db_, dk)))
+    monkeypatch.setattr(worker.s3, "delete_object", lambda b, k: ops.append(("del", b, k)))
+    monkeypatch.setattr(worker.db, "run", lambda coro: coro.close())
+    monkeypatch.setattr(worker, "extract_pose", lambda path, motion: (np.full(4, np.nan), [None] * 4, 30.0))
+
+    result = worker.label_file("ios", entry, str(tmp_path))
+    worker.move_to_labeled("ios", entry, result)
+    assert ("get", "fitset-collect-labeled", entry.label.data_key) in ops and ("get", "fitset-collect-labeled", "v") in ops
+    assert not any(op[0] == "del" for op in ops)
+    assert [op for op in ops if op[0] == "copy"] == [("copy", "fitset-collect-labeled", result["data_key"], "fitset-dataset", _dataset().s3_key)]

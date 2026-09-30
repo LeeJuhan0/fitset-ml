@@ -144,6 +144,8 @@ function updateVideoSelect() {
 
 async function startLabeling() {
   if (!selectedVideos.size) return;
+  const relabel = videoFiles.filter(f => selectedVideos.has(f.filename) && f.label).length;
+  if (relabel && !confirm(`${relabel}개는 이미 라벨링됨, 다시 라벨링하면 수동 수정이 덮어써지고 승격본도 갱신됩니다.`)) return;
   const btn = document.getElementById('labelBtn');
   btn.disabled = true;
   try {

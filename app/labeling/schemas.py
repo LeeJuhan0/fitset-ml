@@ -40,7 +40,7 @@ class ChangeClassRequest(CamelModel):
 class EditPhasesRequest(CamelModel):
     """구간 수정 바디, filename, 프레임별 phase"""
     filename: str
-    phases: list[Annotated[int, Field(ge=-1, le=2)]]
+    phases: list[Annotated[int, Field(ge=-1, le=1)]]
 
 
 class DeleteFileResponse(CamelModel):

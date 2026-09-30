@@ -23,25 +23,23 @@ def _segments(phase):
     return out
 
 
-def test_pushup_alternates_down_up_with_pauses_at_ends():
-    phase = algo.phases_from_angles(_reps(), FPS, down_is_decreasing=True)
-    segs = _segments(phase)
-    assert segs[0] == 2 and segs[-1] == 2
-    inner = [s for s in segs if s in (0, 1)]
-    assert inner[:2] == [0, 1]
-    assert inner.count(0) == 4 and inner.count(1) == 4
+def test_pushup_only_down_up_switching_at_turns():
+    angles = _reps()
+    phase = algo.phases_from_angles(angles, FPS, down_is_decreasing=True)
+    assert set(phase.tolist()) == {0, 1}
+    assert _segments(phase) == [0, 1] * 4
+    bottom = int(1.5 * FPS + FPS)
+    assert phase[bottom - 3] == 0 and phase[bottom + 3] == 1
 
 
 def test_curl_direction_is_inverted():
     phase = algo.phases_from_angles(_reps(), FPS, down_is_decreasing=False)
-    inner = [s for s in _segments(phase) if s in (0, 1)]
-    assert inner[:2] == [1, 0]
+    assert _segments(phase)[:2] == [1, 0]
 
 
-def test_small_swing_is_pause_and_undetected_is_minus_one():
-    angles = _reps(n=1, lo=160.0)
-    phase = algo.phases_from_angles(angles, FPS, True)
-    assert set(phase.tolist()) == {2}
+def test_small_swing_and_undetected_is_minus_one():
+    phase = algo.phases_from_angles(_reps(n=1, lo=160.0), FPS, True)
+    assert (phase == -1).all()
 
     angles = _reps()
     angles[:60] = np.nan
@@ -53,15 +51,15 @@ def test_small_swing_is_pause_and_undetected_is_minus_one():
 
 
 def test_row_phases_map_rows_to_frames_and_summarize():
-    phase = np.array([2, 2, 0, 0, 1, 1], dtype=int)
+    phase = np.array([1, 1, 0, 0, 1, 1], dtype=int)
     video_start = 1000.0
     ts = np.array([video_start + i / FPS for i in range(6)] + [video_start + 5.0])
     row_phase = algo.row_phases(ts, phase, FPS, video_start)
-    assert row_phase == [2, 2, 0, 0, 1, 1, -1]
+    assert row_phase == [1, 1, 0, 0, 1, 1, -1]
 
     summary = algo.summarize(np.array([100.0, np.nan, 120.0, 130.0]), FPS, row_phase)
     assert summary["frames"] == 4 and summary["detectedFraction"] == 0.75
-    assert summary["rowPhaseCounts"] == {"-1": 1, "0": 2, "1": 2, "2": 2}
+    assert summary["rowPhaseCounts"] == {"-1": 1, "0": 2, "1": 4}
     assert summary["repCount"] == 1
 
 
@@ -69,9 +67,9 @@ def test_windows_majority_and_rep_count():
     x = np.zeros((20, 6), dtype=np.float32)
     y = np.array([0] * 5 + [1] * 5 + [-1] * 5 + [2] * 5)
     xs, ys = phase_algo.make_windows(x, y, window=5, stride=5)
-    assert xs.shape == (3, 5, 6) and ys.tolist() == [0, 1, 2]
+    assert xs.shape == (2, 5, 6) and ys.tolist() == [0, 1]
     assert phase_algo.window_label(np.array([0, 0, -1, -1, -1, -1])) == -1
-    assert phase_algo.window_label(np.array([2, 2, 1, 1, 1])) == 1
-    assert phase_algo.count_reps([2, 0, 0, 1, 1, 2, 0, 1, 0]) == 2
+    assert phase_algo.window_label(np.array([0, 0, 1, 1, 1])) == 1
+    assert phase_algo.count_reps([1, 0, 0, 1, 1, 0, 1, 0]) == 3
     assert phase_algo.count_reps([0, 0, 0]) == 0
 

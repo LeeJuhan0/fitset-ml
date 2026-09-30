@@ -55,7 +55,7 @@ class PhaseLabelRead(PhaseLabelBase):
     @computed_field
     @property
     def has_phase(self) -> bool:
-        """0 1 2 구간 라벨 존재 여부, 규칙 없으면 관절만"""
+        """0 1 구간 라벨 존재 여부, 규칙 없으면 관절만"""
         return bool(self.phase_summary.get("hasPhase"))
 
 
@@ -161,8 +161,8 @@ class CollectFileRead(CollectFileBase):
     @computed_field
     @property
     def can_label(self) -> bool:
-        """라벨링 시작 가능, 업로드 완료·대기 또는 실패, 종목 무관"""
-        return self.uploaded and self.is_labelable
+        """라벨링 시작 가능, 업로드 완료·진행 중 아님, 완료 파일은 재라벨"""
+        return self.uploaded and not self.is_labeling
 
     @computed_field
     @property

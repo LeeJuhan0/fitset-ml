@@ -90,20 +90,29 @@ def motion_signal(motion, world: np.ndarray, image: np.ndarray, vis: np.ndarray)
     return signal
 
 
+def download_sources(entry: CollectFileRead, workdir: str) -> tuple[pd.DataFrame, str]:
+    """IMU 표와 영상 경로, 재라벨은 labeled 객체에서"""
+    video_path = os.path.join(workdir, entry.filename[:-4] + VIDEO_EXT)
+    src_path = os.path.join(workdir, "src")
+    if entry.label is not None:
+        s3.download_object(entry.label.data_bucket, entry.label.data_key, src_path)
+        s3.download_object(entry.label.video_bucket, entry.label.video_key, video_path)
+        return pd.read_parquet(src_path).drop(columns=["phase"], errors="ignore"), video_path
+    s3.download_object(entry.csv_bucket, entry.csv_key, src_path)
+    s3.download_object(entry.video_bucket, entry.video_key, video_path)
+    df = pd.read_csv(src_path)
+    df.columns = df.columns.str.strip()
+    return df, video_path
+
+
 def label_file(platform: str, entry: CollectFileRead, workdir: str) -> dict:
     """다운로드, 추출, phase 부착, labeled 버킷 업로드 복사"""
-    filename, class_name = entry.filename, entry.class_name
-    stem = filename[:-4]
-    motion = load_motion(class_name)
-    csv_path = os.path.join(workdir, filename)
-    video_path = os.path.join(workdir, stem + VIDEO_EXT)
-    s3.download_object(entry.csv_bucket, entry.csv_key, csv_path)
-    s3.download_object(entry.video_bucket, entry.video_key, video_path)
+    stem = entry.filename[:-4]
+    motion = load_motion(entry.class_name)
+    df, video_path = download_sources(entry, workdir)
 
     angles, landmarks, fps = extract_pose(video_path, motion)
     phase = algo.phases_from_angles(angles, fps, motion.DOWN_IS_DECREASING if motion is not None else True)
-    df = pd.read_csv(csv_path)
-    df.columns = df.columns.str.strip()
     row_phase = algo.row_phases(df["timestamp"].to_numpy(dtype=float), phase, fps, float(entry.video_start))
     df["phase"] = np.array(row_phase, dtype=np.int8)
     summary = algo.summarize(angles, fps, row_phase)
@@ -121,21 +130,26 @@ def label_file(platform: str, entry: CollectFileRead, workdir: str) -> dict:
     pose_key = f"{folder}/{stem}{POSE_EXT}"
     s3.upload_object(dst, data_key, data_path, "application/vnd.apache.parquet")
     s3.upload_object(dst, pose_key, pose_path, "application/json")
-    s3.copy_object(entry.video_bucket, entry.video_key, dst)
+    if entry.label is None:
+        s3.copy_object(entry.video_bucket, entry.video_key, dst)
     return {"summary": summary, "data_key": data_key, "pose_key": pose_key}
 
 
 def move_to_labeled(platform: str, entry: CollectFileRead, result: dict) -> None:
-    """목록 완료 기록, 원본 객체 삭제"""
+    """재라벨은 승격본 먼저 갱신, 목록 완료 기록, 첫 라벨은 원본 삭제"""
     dst = settings.collect_labeled_bucket
+    ds = entry.dataset_file
+    if entry.label is not None and ds is not None and ds.uploaded:
+        s3.copy_object(dst, result["data_key"], ds.bucket, ds.s3_key)
     db.run(_with_session(
         finish_label, platform, entry.filename,
         data_bucket=dst, data_key=result["data_key"],
         video_bucket=dst, video_key=entry.video_key,
         pose_key=result["pose_key"], phase_summary=result["summary"],
     ))
-    s3.delete_object(entry.csv_bucket, entry.csv_key)
-    s3.delete_object(entry.video_bucket, entry.video_key)
+    if entry.label is None:
+        s3.delete_object(entry.csv_bucket, entry.csv_key)
+        s3.delete_object(entry.video_bucket, entry.video_key)
 
 
 def run(platform: str, filenames: list[str]) -> None:

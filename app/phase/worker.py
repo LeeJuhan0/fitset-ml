@@ -24,8 +24,8 @@ async def _with_session(fn, *args, **kwargs):
 from app.worker.model_def import FitSetModel
 from app.worker.preprocess import CHANNELS, load_table
 
-NUM_CLASSES = 3
-CLASS_NAMES = ["down", "up", "pause"]
+NUM_CLASSES = 2
+CLASS_NAMES = ["down", "up"]
 INFER_STRIDE = 10
 VAL_FRAC = 0.2
 BATCH = 64

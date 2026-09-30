@@ -3,9 +3,9 @@ import itertools
 import numpy as np
 
 
-def window_label(y: np.ndarray, num_classes: int = 3) -> int:
-    """윈도우 라벨, -1 제외 다수결, 유효 절반 미만이면 -1"""
-    valid = y[y >= 0]
+def window_label(y: np.ndarray, num_classes: int = 2) -> int:
+    """윈도우 라벨, 범위 밖 제외 다수결, 유효 절반 미만이면 -1"""
+    valid = y[(y >= 0) & (y < num_classes)]
     if len(valid) < len(y) // 2:
         return -1
     return int(np.argmax(np.bincount(valid, minlength=num_classes)))
