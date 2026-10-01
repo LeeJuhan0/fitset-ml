@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.core.schemas import ApiResponse
+from app.core.schemas import ApiResponse, FilenameRequest
 from app.core.security import check_basic_auth
 from app.deployment.schemas import DeployEnvRequest
 from app.deps import DbSessionDep, get_trace_id, validate_platform
@@ -15,6 +15,7 @@ from app.phase.schemas import (
     ModelsRequest,
     PhaseTrainResponse,
     PhaseTrainRequest,
+    PredictResponse,
 )
 
 router = APIRouter(tags=["phase"], dependencies=[Depends(check_basic_auth)])
@@ -64,3 +65,15 @@ async def model_download_url(
 ):
     """산출물 presigned GET, pt onnx mlpackage"""
     return ApiResponse(trace_id=trace_id, data=await service.model_download_url(session, platform, model_id, query.format))
+
+
+@router.get("/{platform}/phase/models/{model_id}/predict", response_model=ApiResponse[PredictResponse])
+async def predict(
+    session: DbSessionDep,
+    model_id: int,
+    query: Annotated[FilenameRequest, Query()],
+    platform: str = Depends(validate_platform),
+    trace_id: str = Depends(get_trace_id),
+):
+    """라벨된 수집 파일에 모델 추론, 영상 프레임에 맞춘 예측"""
+    return ApiResponse(trace_id=trace_id, data=await service.predict(session, platform, model_id, query.filename))

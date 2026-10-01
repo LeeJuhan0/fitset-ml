@@ -27,3 +27,22 @@ def count_reps(seq: list[int]) -> int:
     """렙 수, 0·1 구간 수 중 작은 쪽"""
     runs = [k for k, _ in itertools.groupby(seq)]
     return min(runs.count(0), runs.count(1))
+
+
+def row_predictions(preds: list[int], n_rows: int, window: int, stride: int) -> np.ndarray:
+    """윈도우 예측 → 행별 예측, 윈도우 중심 ±stride/2 에 배정, 밖은 -1"""
+    out = np.full(n_rows, -1, dtype=int)
+    for i, p in enumerate(preds):
+        c = i * stride + window // 2
+        out[max(0, c - stride // 2):c + stride - stride // 2] = p
+    return out
+
+
+def frame_values(timestamps: np.ndarray, row_values: np.ndarray, fps: float, video_start: float, n_frames: int) -> list[int]:
+    """행 값 → 영상 프레임 값, 가장 가까운 행, IMU 범위 밖은 -1"""
+    t = video_start + np.arange(n_frames) / fps
+    j = np.clip(np.searchsorted(timestamps, t), 1, len(timestamps) - 1)
+    j = np.where(np.abs(timestamps[j - 1] - t) <= np.abs(timestamps[j] - t), j - 1, j)
+    out = row_values[j].astype(int)
+    out[(t < timestamps[0]) | (t > timestamps[-1])] = -1
+    return out.tolist()

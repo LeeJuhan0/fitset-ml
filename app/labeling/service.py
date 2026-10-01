@@ -10,6 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.labeling.schemas import (
     DeleteFileResponse,
+    ImuResponse,
     LabelResponse,
     ListFilesResponse,
     PoseResponse,
@@ -211,6 +212,28 @@ async def pose(s: AsyncSession, platform: str, filename: str) -> PoseResponse:
         raise PoseNotReadyError(filename)
     data = await asyncio.to_thread(read_pose, entry.label.data_bucket, entry.label.pose_key)
     return PoseResponse(filename=filename, fps=data["fps"], frames=data["frames"])
+
+
+def _read_imu(entry: CollectFileRead) -> dict:
+    """라벨 parquet 에서 영상 시작 기준 초와 6채널"""
+    from app.worker.preprocess import CHANNELS, load_table
+
+    with tempfile.TemporaryDirectory() as workdir:
+        data_path = pathlib.Path(workdir) / "data.parquet"
+        s3.download_object(entry.label.data_bucket, entry.label.data_key, str(data_path))
+        df = load_table(str(data_path))
+    return {
+        "t": (df["timestamp"].astype(float) - float(entry.video_start)).round(3).tolist(),
+        "channels": {c: df[c].astype(float).round(4).tolist() for c in CHANNELS},
+    }
+
+
+async def imu(s: AsyncSession, platform: str, filename: str) -> ImuResponse:
+    """IMU 파형 조회, 라벨 전 404"""
+    entry = await get_file(s, platform, filename)
+    if entry is None or entry.label is None:
+        raise PoseNotReadyError(filename)
+    return ImuResponse(filename=filename, **await asyncio.to_thread(_read_imu, entry))
 
 
 def _rewrite_phases(entry: CollectFileRead, pose_data: dict, phases: list[int]) -> list[int]:

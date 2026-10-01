@@ -1,4 +1,6 @@
+import asyncio
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -6,10 +8,15 @@ import tempfile
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.phase.schemas import ListModelsResponse, ModelUrlResponse, PhaseTrainResponse
+from app.phase.schemas import ListModelsResponse, ModelUrlResponse, PhaseTrainResponse, PredictResponse
+from app.core import s3
 from app.core.s3 import presigned_get_url
 from app.core.utils import LOST_PROCESS_ERROR, exit_error, read_tail
-from app.phase import utils
+from app.labeling.exceptions import PoseNotReadyError
+from app.labeling.models import CollectFileRead
+from app.labeling.repository import get_file
+from app.labeling.utils import dataset_filename
+from app.phase import algo, utils
 from app.phase.exceptions import (
     InvalidModelFormatError,
     ModelArtifactNotFoundError,
@@ -113,3 +120,54 @@ async def deploy_model(s: AsyncSession, platform: str, model_id: int, env: str) 
         raise ModelArtifactNotFoundError()
     return await deploy_phase_model(s, platform, model_id, env)
 
+
+
+def _predict(model: PhaseModelRead, entry: CollectFileRead) -> dict:
+    """pt meta 라벨 parquet 받아 학습 평가와 같은 추론, 프레임에 맞춤"""
+    import numpy as np
+    import torch
+
+    from app.phase.worker import INFER_STRIDE, VAL_FRAC, infer_sequence
+    from app.worker.model_def import FitSetModel
+    from app.worker.preprocess import CHANNELS, load_table
+
+    meta = json.loads(s3.get_object_bytes(model.bucket, model.meta_key))
+    with tempfile.TemporaryDirectory() as workdir:
+        pt_path = os.path.join(workdir, "model.pt")
+        s3.download_object(model.bucket, model.pt_key, pt_path)
+        data_path = os.path.join(workdir, "data.parquet")
+        s3.download_object(entry.label.data_bucket, entry.label.data_key, data_path)
+        net = FitSetModel(num_classes=len(meta["classes"]))
+        net.load_state_dict(torch.load(pt_path, map_location="cpu", weights_only=True))
+        df = load_table(data_path)
+    net.eval()
+    x = df[CHANNELS].to_numpy(dtype=np.float32)
+    y = df["phase"].to_numpy(dtype=int) if "phase" in df else np.full(len(df), -1)
+    ts = df["timestamp"].to_numpy(dtype=float)
+    window = meta["window"]
+    preds = infer_sequence(net, x, np.array(meta["mean"], np.float32), np.array(meta["std"], np.float32), window, "cpu")
+
+    fps, n_frames, start = entry.label.phase_summary["fps"], entry.label.phase_summary["frames"], float(entry.video_start)
+    row_pred = algo.row_predictions(preds, len(x), window, INFER_STRIDE)
+    val_start_frame = None
+    if dataset_filename(entry.filename) in meta.get("trained_files", []):
+        val_start_frame = int(round((ts[int(len(x) * (1 - VAL_FRAC))] - start) * fps))
+    return {
+        "fps": fps,
+        "frames": algo.frame_values(ts, row_pred, fps, start, n_frames),
+        "label_count": algo.count_reps([int(v) for v in y if v >= 0]),
+        "model_count": algo.count_reps(preds),
+        "val_start_frame": val_start_frame,
+    }
+
+
+async def predict(s: AsyncSession, platform: str, model_id: int, filename: str) -> PredictResponse:
+    """라벨된 수집 파일에 모델 추론, 모델 미완성 또는 라벨 전이면 404"""
+    model = await get_phase_model(s, platform, model_id)
+    if model is None or not model.can_download or model.meta_key is None:
+        raise ModelArtifactNotFoundError()
+    entry = await get_file(s, platform, filename)
+    if entry is None or entry.label is None:
+        raise PoseNotReadyError(filename)
+    out = await asyncio.to_thread(_predict, model, entry)
+    return PredictResponse(model_id=model_id, version=model.version, filename=filename, **out)

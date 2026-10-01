@@ -95,6 +95,13 @@ class PoseResponse(CamelModel):
     frames: list[Any]
 
 
+class ImuResponse(CamelModel):
+    """imu 응답, 영상 시작 기준 초, 채널별 값"""
+    filename: str
+    t: list[float]
+    channels: dict[str, list[float]]
+
+
 class PromoteRequest(CamelModel):
     """promote 바디, filenames"""
     filenames: list[str]

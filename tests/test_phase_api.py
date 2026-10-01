@@ -95,3 +95,42 @@ def test_dead_phase_trainer_marked_failed(admin_client, monkeypatch):
     assert set(failed) == {2, 3}
     assert "OOM" in failed[2] and failed[3] == LOST_PROCESS_ERROR
     assert list(phase_mod._trainer_procs) == [1]
+
+
+def test_predict_aligns_frames_and_marks_val_start(admin_client, monkeypatch, tmp_path):
+    import json
+    import shutil
+
+    import numpy as np
+    import pandas as pd
+    import torch
+
+    from app.labeling.models import CollectFileRead, PhaseLabelRead
+    from app.worker.model_def import FitSetModel
+
+    model = PhaseModelRead(id=3, platform="ios", class_name="PUSHUP", version="v1.0", status="completed", window=20,
+                           bucket="fitset-phase-models", pt_key="m.pt", meta_key="meta.json", created_at="2026-09-22T03:00:00+00:00")
+    label = PhaseLabelRead(data_bucket="b", data_key="d.parquet", video_bucket="b", video_key="v", pose_key="p",
+                           phase_summary={"fps": 10.0, "frames": 12}, labeled_at="2026-09-22T01:00:00+00:00")
+    entry = CollectFileRead(filename="PUSHUP_DEV1_0001.csv", class_name="PUSHUP", device_id="DEV1", csv_bucket="c", csv_key="c",
+                            video_bucket="v", video_key="v", uploaded=True, video_start=1000.0, rows=100, status="labeled",
+                            created_at="2026-09-22T00:00:00+00:00", label=label)
+    torch.save(FitSetModel(num_classes=2).state_dict(), tmp_path / "m.pt")
+    n = 100
+    pd.DataFrame({"timestamp": 1000.0 + np.arange(n) * 0.01, **{c: np.random.randn(n) for c in ["ax", "ay", "az", "gx", "gy", "gz"]},
+                  "phase": np.repeat([0, 1, 0, 1], 25)}).to_parquet(tmp_path / "d.parquet")
+    meta = {"classes": ["down", "up"], "window": 20, "mean": [0.0] * 6, "std": [1.0] * 6, "trained_files": ["PUSHUP_DEV1_0001.parquet"]}
+    monkeypatch.setattr(phase_mod, "get_phase_model", async_(lambda s, p, i: model if i == 3 else None))
+    monkeypatch.setattr(phase_mod, "get_file", async_(lambda s, p, f: entry if f == entry.filename else None))
+    monkeypatch.setattr(phase_mod.s3, "get_object_bytes", lambda b, k: json.dumps(meta).encode())
+    monkeypatch.setattr(phase_mod.s3, "download_object", lambda b, k, dst: shutil.copy(tmp_path / k, dst))
+
+    resp = admin_client.get("/api/v1/ios/phase/models/3/predict?filename=PUSHUP_DEV1_0001.csv")
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["version"] == "v1.0" and data["fps"] == 10.0 and len(data["frames"]) == 12
+    assert data["labelCount"] == 2 and data["valStartFrame"] == 8
+    assert data["frames"][0] == -1 and data["frames"][1] in (0, 1) and data["frames"][10:] == [-1, -1]
+
+    assert admin_client.get("/api/v1/ios/phase/models/9/predict?filename=PUSHUP_DEV1_0001.csv").status_code == 404
+    assert admin_client.get("/api/v1/ios/phase/models/3/predict?filename=OTHER.csv").status_code == 404

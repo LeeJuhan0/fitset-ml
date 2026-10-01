@@ -335,3 +335,20 @@ def test_relabel_reads_labeled_objects_and_refreshes_promoted_copy(monkeypatch, 
     assert ("get", "fitset-collect-labeled", entry.label.data_key) in ops and ("get", "fitset-collect-labeled", "v") in ops
     assert not any(op[0] == "del" for op in ops)
     assert [op for op in ops if op[0] == "copy"] == [("copy", "fitset-collect-labeled", result["data_key"], "fitset-dataset", _dataset().s3_key)]
+
+
+def test_imu_returns_seconds_from_video_start(admin_client, monkeypatch, tmp_path):
+    import pandas as pd
+
+    label = PhaseLabelRead(data_bucket="b", data_key="k", video_bucket="b", video_key="v", pose_key="p",
+                           phase_summary={}, labeled_at="2026-09-22T01:00:00+00:00")
+    monkeypatch.setattr(labeling_mod, "get_file", async_(lambda s, p, f: _entry(status="labeled", label=label, video_start=1000.0)))
+    pd.DataFrame({"timestamp": [1000.5, 1000.51], **{c: [1.0, 2.0] for c in ["ax", "ay", "az", "gx", "gy", "gz"]}}).to_parquet(tmp_path / "d.parquet")
+    monkeypatch.setattr(labeling_mod.s3, "download_object", lambda b, k, dst: pathlib.Path(dst).write_bytes((tmp_path / "d.parquet").read_bytes()))
+
+    resp = admin_client.get("/api/v1/ios/phase/imu?filename=PUSHUP_DEV1_0001.csv")
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["t"] == [0.5, 0.51] and data["channels"]["gz"] == [1.0, 2.0]
+    monkeypatch.setattr(labeling_mod, "get_file", async_(lambda s, p, f: _entry()))
+    assert admin_client.get("/api/v1/ios/phase/imu?filename=PUSHUP_DEV1_0001.csv").status_code == 404

@@ -73,3 +73,15 @@ def test_windows_majority_and_rep_count():
     assert phase_algo.count_reps([1, 0, 0, 1, 1, 0, 1, 0]) == 3
     assert phase_algo.count_reps([0, 0, 0]) == 0
 
+
+
+def test_row_predictions_center_aligned_and_uncovered_minus_one():
+    out = phase_algo.row_predictions([0, 1, 1], n_rows=50, window=20, stride=10)
+    assert (out[:5] == -1).all() and (out[5:15] == 0).all() and (out[15:35] == 1).all() and (out[35:] == -1).all()
+
+
+def test_frame_values_nearest_row_and_outside_imu_minus_one():
+    ts = 100.0 + np.arange(10) * 0.1
+    rows = np.array([0, 0, 0, 1, 1, 1, 1, 0, 0, 0])
+    out = phase_algo.frame_values(ts, rows, fps=10.0, video_start=99.8, n_frames=14)
+    assert out == [-1, -1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, -1, -1]

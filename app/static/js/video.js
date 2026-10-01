@@ -6,8 +6,12 @@ let poseRaf = null;
 let editing = false;
 let originalPhases = null;
 let editFilename = null;
+let imuData = null;    // {t: 영상 시작 기준 초, channels}
+let predData = null;   // 모델 예측, 프레임별
+const FLICKER_SECONDS = 0.3;
+const IMU_COLORS = ['#EF4444', '#F59E0B', '#8B5CF6'];
 
-async function openVideo(filename) {
+async function openVideo(filename, modelId) {
   const f = videoFiles.find(x => x.filename === filename);
   const modal = document.getElementById('videoModal');
   const video = document.getElementById('viewerVideo');
@@ -16,7 +20,8 @@ async function openVideo(filename) {
   document.getElementById('phaseStrip').innerHTML = '';
   document.getElementById('phaseBadge').style.display = 'none';
   document.getElementById('phaseEditBar').style.display = 'none';
-  poseData = null;
+  poseData = null; imuData = null; predData = null;
+  ['predStrip', 'imuCanvas', 'predBar', 'valMark', 'playhead'].forEach(id => document.getElementById(id).style.display = 'none');
   editFilename = filename;
   setEditing(false);
   modal.classList.add('visible');
@@ -30,7 +35,10 @@ async function openVideo(filename) {
       renderPhaseStrip();
       document.getElementById('phaseBadge').style.display = 'flex';
       document.getElementById('phaseEditBar').style.display = 'flex';
+      document.getElementById('playhead').style.display = 'block';
       drawLoop();
+      loadImu(filename);
+      if (f.label.hasPhase) setupPredModels(filename, f.class, modelId);
     }
   } catch (e) { document.getElementById('videoSub').textContent = `불러오기 실패: ${e.message}`; }
 }
@@ -39,7 +47,7 @@ function closeVideo() {
   const video = document.getElementById('viewerVideo');
   video.pause(); video.removeAttribute('src'); video.load();
   if (poseRaf) cancelAnimationFrame(poseRaf);
-  poseRaf = null; poseData = null;
+  poseRaf = null; poseData = null; imuData = null; predData = null; editFilename = null;
   document.getElementById('videoModal').classList.remove('visible');
 }
 
@@ -77,6 +85,7 @@ function drawLoop() {
         ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
       }
     }
+    document.getElementById('playhead').style.left = `${Math.min(100, video.currentTime * poseData.fps / poseData.frames.length * 100)}%`;
     const badge = document.getElementById('phaseBadge');
     badge.className = 'phase-badge ' + (phase >= 0 ? `p${phase}` : 'pn');
     badge.innerHTML = phase >= 0 ? `${phase} <small>${PHASE_NAME[phase]}</small>` : `– <small>미검출</small>`;
@@ -85,16 +94,23 @@ function drawLoop() {
   poseRaf = requestAnimationFrame(step);
 }
 
+// 같은 값이 이어지는 구간, [값, 프레임 수]
+function segmentsOf(values) {
+  const segs = [];
+  let start = 0;
+  for (let i = 1; i <= values.length; i++) {
+    if (i < values.length && values[i] === values[start]) continue;
+    segs.push([values[start], i - start]); start = i;
+  }
+  return segs;
+}
+
 function renderPhaseStrip() {
   const strip = document.getElementById('phaseStrip');
   const frames = poseData.frames;
-  const segs = [];
-  let start = 0;
-  for (let i = 1; i <= frames.length; i++) {
-    if (i < frames.length && frames[i][0] === frames[start][0]) continue;
-    segs.push([frames[start][0], i - start]); start = i;
-  }
+  const segs = segmentsOf(frames.map(fr => fr[0]));
   strip.innerHTML = segs.map(([p, n]) => `<div class="${p >= 0 ? 'p' + p : 'pn'}" style="width:${(n / frames.length) * 100}%"></div>`).join('');
+  drawImu();
   if (!editing) return;
   let pos = 0;
   segs.slice(0, -1).forEach(([, n]) => {
@@ -198,4 +214,107 @@ function seekFromStrip(event) {
   const video = document.getElementById('viewerVideo');
   video.currentTime = ratio * poseData.frames.length / poseData.fps;
 }
+
+// ── 모델 예측 띠 ──────────────────────────────────────────────────────
+async function setupPredModels(filename, cls, modelId) {
+  const sel = document.getElementById('predModelSel');
+  try {
+    const { data } = await api('GET', `/phase/models?class=${encodeURIComponent(cls)}`);
+    if (editFilename !== filename) return;
+    const models = data.models.filter(m => m.canDownload);
+    const dev = phaseDeployed('dev', cls)?.latestVersion;
+    const chosen = models.find(m => m.id === modelId) ?? models.find(m => m.version === dev) ?? models[0];
+    sel.innerHTML = '<option value="">예측 안 함</option>' + models.map(m =>
+      `<option value="${m.id}" ${m === chosen ? 'selected' : ''}>${m.version}${ENVS.filter(env => phaseDeployed(env, cls)?.latestVersion === m.version).map(env => ` · ${env}`).join('')}</option>`).join('');
+    document.getElementById('predBar').style.display = 'flex';
+    document.getElementById('predInfo').textContent = models.length ? '' : '이 종목의 학습된 모델이 없습니다';
+    loadPrediction();
+  } catch (e) { document.getElementById('predInfo').textContent = `모델 목록 실패: ${e.message}`; }
+}
+
+async function loadPrediction() {
+  const filename = editFilename, id = document.getElementById('predModelSel').value;
+  const info = document.getElementById('predInfo');
+  predData = null;
+  renderPredStrip();
+  if (!id) { info.textContent = ''; return; }
+  info.textContent = '추론 중...';
+  try {
+    const { data } = await api('GET', `/phase/models/${id}/predict?filename=${encodeURIComponent(filename)}`);
+    if (editFilename !== filename || document.getElementById('predModelSel').value !== id) return;
+    predData = data;
+    renderPredStrip();
+  } catch (e) { info.textContent = `추론 실패: ${e.message}`; }
+}
+
+function renderPredStrip() {
+  const strip = document.getElementById('predStrip');
+  const mark = document.getElementById('valMark');
+  if (!predData) { strip.style.display = 'none'; mark.style.display = 'none'; return; }
+  const frames = predData.frames;
+  const segs = segmentsOf(frames);
+  const short = n => n / predData.fps < FLICKER_SECONDS;
+  strip.innerHTML = segs.map(([p, n]) =>
+    `<div class="${p >= 0 ? 'p' + p : 'pn'}${p >= 0 && short(n) ? ' flicker' : ''}" style="width:${(n / frames.length) * 100}%"></div>`).join('');
+  strip.style.display = 'flex';
+  const flickers = segs.filter(([p, n]) => p >= 0 && short(n)).length;
+  const d = predData.modelCount - predData.labelCount;
+  const valNote = predData.valStartFrame != null ? '점선 뒤가 검증 구간, 앞은 학습에 쓴 구간' : '학습에 안 쓴 파일';
+  document.getElementById('predInfo').innerHTML =
+    `라벨 렙 <b>${predData.labelCount}</b> · 모델 렙 <b>${predData.modelCount}</b>` +
+    (d ? ` <span style="color:var(--red);font-weight:700">(${d > 0 ? '+' : ''}${d})</span>` : '') +
+    ` · 0.3초 미만 예측 구간 ${flickers}개 · ${valNote}`;
+  mark.style.display = predData.valStartFrame != null ? 'block' : 'none';
+  mark.style.left = `${predData.valStartFrame / frames.length * 100}%`;
+}
+
+// ── IMU 파형 ──────────────────────────────────────────────────────────
+async function loadImu(filename) {
+  try {
+    const { data } = await api('GET', `/phase/imu?filename=${encodeURIComponent(filename)}`);
+    if (editFilename !== filename) return;
+    imuData = data;
+    document.getElementById('imuCanvas').style.display = 'block';
+    drawImu();
+  } catch (e) { console.warn('IMU 불러오기 실패', e); }
+}
+
+// 위 acc, 아래 gyro, 채널별 평균 빼고 묶음 안에서 같은 축척, 회색 세로선은 라벨 경계
+function drawImu() {
+  const canvas = document.getElementById('imuCanvas');
+  if (!imuData || !poseData) return;
+  const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const frames = poseData.frames;
+  const total = frames.length / poseData.fps;
+  ctx.strokeStyle = 'rgba(107,114,128,.35)'; ctx.lineWidth = 1;
+  for (let i = 1; i < frames.length; i++) {
+    if (frames[i][0] === frames[i - 1][0]) continue;
+    const x = i / frames.length * w;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+  }
+  [['ax', 'ay', 'az'], ['gx', 'gy', 'gz']].forEach((group, gi) => {
+    const top = gi * h / 2, half = h / 4;
+    const series = group.map(k => {
+      const v = imuData.channels[k];
+      const mean = v.reduce((a, b) => a + b, 0) / v.length;
+      return v.map(y => y - mean);
+    });
+    const amp = Math.max(1e-6, ...series.map(s => s.reduce((a, b) => Math.max(a, Math.abs(b)), 0)));
+    series.forEach((s, ci) => {
+      ctx.strokeStyle = IMU_COLORS[ci]; ctx.lineWidth = 1;
+      ctx.beginPath();
+      s.forEach((y, i) => {
+        const x = imuData.t[i] / total * w, py = top + half - y / amp * (half - 4);
+        i ? ctx.lineTo(x, py) : ctx.moveTo(x, py);
+      });
+      ctx.stroke();
+    });
+    ctx.fillStyle = '#6B7280'; ctx.font = '10px sans-serif';
+    ctx.fillText(gi ? 'gyro' : 'acc', 4, top + 11);
+  });
+}
+window.addEventListener('resize', drawImu);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeVideo(); });

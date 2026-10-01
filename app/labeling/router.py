@@ -12,6 +12,7 @@ from app.labeling.schemas import (
     ChangeClassRequest,
     DeleteFileResponse,
     EditPhasesRequest,
+    ImuResponse,
     LabelResponse,
     LabelRequest,
     ListFilesResponse,
@@ -123,6 +124,17 @@ async def pose(
 ):
     """관절 phase JSON"""
     return ApiResponse(trace_id=trace_id, data=await service.pose(session, platform, query.filename))
+
+
+@router.get("/{platform}/phase/imu", response_model=ApiResponse[ImuResponse])
+async def imu(
+    session: DbSessionDep,
+    query: Annotated[FilenameRequest, Query()],
+    platform: str = Depends(validate_platform),
+    trace_id: str = Depends(get_trace_id),
+):
+    """라벨 parquet IMU 파형, 영상 시작 기준 시각"""
+    return ApiResponse(trace_id=trace_id, data=await service.imu(session, platform, query.filename))
 
 
 @router.post("/{platform}/phase/promote", response_model=ApiResponse[PromoteResponse])

@@ -56,3 +56,15 @@ class ModelsRequest(CamelModel):
 class ModelFormatRequest(CamelModel):
     """?format= 쿼리, pt onnx mlpackage"""
     format: str
+
+
+class PredictResponse(CamelModel):
+    """predict 응답, 프레임별 모델 예측, 라벨 렙 모델 렙, 검증 구간 시작 프레임"""
+    model_id: int
+    version: str
+    filename: str
+    fps: float
+    frames: list[int]
+    label_count: int
+    model_count: int
+    val_start_frame: int | None

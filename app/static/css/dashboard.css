@@ -347,3 +347,18 @@ th.sorted .sort-ic { color: var(--blue); }
 .stats-table th:first-child, .stats-table td:first-child { text-align: left; }
 .stats-table td { padding: 8px; border-bottom: 1px solid #F3F2EC; text-align: right; font-variant-numeric: tabular-nums; }
 .stats-table td:first-child { font-weight: 600; }
+
+/* ── 렙카운트 파일별 오차, 예측 띠, IMU 파형 ── */
+.data-table tbody tr.detail-row { cursor: default; background: #FAFAF7; }
+.data-table tbody tr.detail-row > td { padding: 12px 16px 18px; }
+.per-file-table tbody tr { cursor: pointer; }
+.per-file-table tbody tr:hover { background: #F3F4F6; }
+.per-file-table .count-off { color: var(--red); font-weight: 700; }
+.per-file-table .count-ok { color: var(--gray-light); }
+.timeline { position: relative; }
+.phase-strip.pred { margin-top: 6px; }
+.phase-strip .flicker { box-shadow: inset 0 0 0 2px #F59E0B; }
+.imu-canvas { display: block; width: 100%; height: 140px; margin-top: 8px; border-radius: 8px; background: #FAFAF7; cursor: pointer; }
+.playhead { position: absolute; top: 12px; bottom: 0; width: 2px; margin-left: -1px; background: #1F2328; pointer-events: none; display: none; }
+.val-mark { position: absolute; top: 12px; bottom: 0; border-left: 2px dashed #B45309; pointer-events: none; display: none; }
+.pred-bar { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--gray); flex-wrap: wrap; }

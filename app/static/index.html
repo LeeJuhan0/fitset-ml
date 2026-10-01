@@ -283,7 +283,18 @@
       <canvas id="viewerCanvas"></canvas>
       <div class="phase-badge" id="phaseBadge" style="display:none"></div>
     </div>
-    <div class="phase-strip" id="phaseStrip" onclick="seekFromStrip(event)"></div>
+    <div class="timeline">
+      <div class="phase-strip" id="phaseStrip" onclick="seekFromStrip(event)"></div>
+      <div class="phase-strip pred" id="predStrip" onclick="seekFromStrip(event)" style="display:none" title="모델 예측"></div>
+      <canvas class="imu-canvas" id="imuCanvas" onclick="seekFromStrip(event)" style="display:none"></canvas>
+      <div class="val-mark" id="valMark" title="이 뒤가 검증 구간, 앞은 학습에 쓴 구간"></div>
+      <div class="playhead" id="playhead"></div>
+    </div>
+    <div class="pred-bar" id="predBar" style="display:none">
+      위 띠 라벨, 아래 띠 예측 · 모델
+      <select class="status-filter" id="predModelSel" onchange="loadPrediction()"></select>
+      <span id="predInfo"></span>
+    </div>
     <div class="phase-edit-bar" id="phaseEditBar" style="display:none">
       <button class="dl-btn" id="phaseEditToggle" onclick="toggleEdit()">구간 편집</button>
       <span id="phaseEditTools" style="display:none">
@@ -297,6 +308,10 @@
       <span><i style="background:#2563EB"></i>0 내려감</span>
       <span><i style="background:#16A34A"></i>1 올라감</span>
       <span><i style="background:#FCA5A5"></i>미검출</span>
+      <span><i style="background:#fff;box-shadow:inset 0 0 0 2px #F59E0B"></i>0.3초 미만 예측 구간</span>
+      <span><i style="background:#EF4444"></i>x</span>
+      <span><i style="background:#F59E0B"></i>y</span>
+      <span><i style="background:#8B5CF6"></i>z</span>
     </div>
   </div>
 </div>

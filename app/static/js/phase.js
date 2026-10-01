@@ -1,6 +1,7 @@
 const PHASE_CLASSES = ['SQUAT', 'PUSHUP', 'DUMBBELL_CURL'];
 const MODEL_STATUS = { training: '학습 중', completed: '완료', failed: '실패' };
 let phaseModels = [];
+let openPhaseDetail = null;   // 파일별 렙 오차를 펼친 모델 id
 
 function phaseDeployed(env, cls) {
   return deployed[env]?.phaseModels.find(p => p.class === cls);
@@ -31,27 +32,68 @@ function renderPhaseModels() {
   if (!phaseModels.length) { el.innerHTML = '<p class="empty">학습된 렙카운팅 모델이 없습니다</p>'; return; }
   el.innerHTML = `
     <table class="data-table">
-      <thead><tr><th>종목</th><th>버전</th><th>상태</th><th>파일</th><th>macro F1</th><th>렙 오차</th><th>윈도우</th><th class="cell-right" style="text-align:right">생성</th><th>다운로드</th></tr></thead>
+      <thead><tr><th>종목</th><th>버전</th><th>상태</th><th>파일</th><th title="val (괄호는 학습 데이터 평가)">macro F1</th><th title="val (괄호는 학습 데이터 평가)">렙 오차</th><th>윈도우</th><th class="cell-right" style="text-align:right">생성</th><th>다운로드</th></tr></thead>
       <tbody>${phaseModels.map(m => {
-        const f = m.metrics?.final ?? {};
+        const v = m.metrics?.val ?? {}, f = m.metrics?.final ?? {};
         const badge = m.status === 'failed' ? `<span class="pill failed" title="${(m.error ?? '').replace(/"/g, '&quot;')}">실패</span>`
           : m.status === 'training' ? '<span class="pill labeling">학습 중</span>' : '<span class="pill labeled">완료</span>';
         const dl = m.canDownload
-          ? ['pt', 'onnx', 'mlpackage'].map(x => `<button class="dl-btn" onclick="downloadPhaseModel(${m.id},'${x}')">${x}</button>`).join('')
+          ? ['pt', 'onnx', 'mlpackage'].map(x => `<button class="dl-btn" onclick="event.stopPropagation();downloadPhaseModel(${m.id},'${x}')">${x}</button>`).join('')
           : '';
-        return `<tr>
+        const open = openPhaseDetail === m.id;
+        return `<tr class="${open ? 'selected' : ''}" onclick="togglePhaseDetail(${m.id})" title="클릭하면 파일별 렙 오차">
           <td><span class="pill class">${m.class}</span></td>
           <td><b>${m.version}</b>${ENVS.filter(env => phaseDeployed(env, m.class)?.latestVersion === m.version).map(env => ` <span class="pill env ${env}">${env}</span>`).join('')}</td>
           <td>${badge}</td>
           <td>${m.numFiles}</td>
-          <td>${f.macroF1 ?? f.macro_f1 ?? '-'}</td>
-          <td>${f.countMae ?? f.count_mae ?? '-'}</td>
+          <td>${valAndFinal(v.macro_f1, f.macro_f1)}</td>
+          <td>${valAndFinal(v.count_mae, f.count_mae)}</td>
           <td style="color:#9CA3AF">${m.window}/${m.stride}</td>
           <td class="cell-right"><div class="v">${fmtDate(m.createdAt)}</div></td>
           <td style="white-space:nowrap">${dl}</td>
-        </tr>`;
+        </tr>${open ? `<tr class="detail-row"><td colspan="9">${phaseDetail(m)}</td></tr>` : ''}`;
       }).join('')}</tbody>
     </table>`;
+}
+
+function valAndFinal(v, f) {
+  return `${v ?? '-'} <span style="color:#9CA3AF">(${f ?? '-'})</span>`;
+}
+
+function togglePhaseDetail(id) {
+  openPhaseDetail = openPhaseDetail === id ? null : id;
+  renderPhaseModels();
+}
+
+// 파일별 렙 수, val 은 각 파일 끝 VAL_FRAC 구간, final 은 전체 재학습 모델을 학습 데이터 그대로 평가
+function phaseDetail(m) {
+  const val = m.metrics?.val, fin = m.metrics?.final;
+  if (!val && !fin) return '<p class="empty">지표 없음</p>';
+  const vf = val?.per_file ?? {}, ff = fin?.per_file ?? {};
+  const diff = r => r ? r.model_count - r.label_count : null;
+  const names = [...new Set([...Object.keys(vf), ...Object.keys(ff)])]
+    .sort((a, b) => Math.abs(diff(vf[b]) ?? 0) - Math.abs(diff(vf[a]) ?? 0) || Math.abs(diff(ff[b]) ?? 0) - Math.abs(diff(ff[a]) ?? 0));
+  const diffCell = d => d == null ? '<td>-</td>' : `<td class="${d ? 'count-off' : 'count-ok'}">${d > 0 ? '+' : ''}${d}</td>`;
+  const summary = (name, x) => x ? `${name} acc ${x.acc} · F1 ${x.macro_f1} · 렙 오차 ${x.count_mae ?? '-'}` : `${name} 없음`;
+  return `<div class="phase-detail">
+    <div class="modal-sub">${summary('val', val)} &nbsp;|&nbsp; ${summary('학습 데이터', fin)}<br>
+      val 은 파일마다 끝 20% 구간만 센 렙 수, 학습 데이터 평가는 학습에 쓴 데이터라 실제보다 좋게 나온다. 파일을 누르면 영상에서 예측을 본다</div>
+    <table class="stats-table per-file-table">
+      <thead><tr><th>파일</th><th>val 라벨</th><th>val 모델</th><th>val 차이</th><th>전체 라벨</th><th>전체 모델</th><th>전체 차이</th></tr></thead>
+      <tbody>${names.map(n => `<tr onclick="event.stopPropagation();openVideoFromDataset('${n}', ${m.id})">
+        <td>${n}</td>
+        <td>${vf[n]?.label_count ?? '-'}</td><td>${vf[n]?.model_count ?? '-'}</td>${diffCell(diff(vf[n]))}
+        <td>${ff[n]?.label_count ?? '-'}</td><td>${ff[n]?.model_count ?? '-'}</td>${diffCell(diff(ff[n]))}
+      </tr>`).join('')}</tbody>
+    </table>
+  </div>`;
+}
+
+// 학습 파일명은 승격된 {stem}.parquet, 수집 파일은 {stem}.csv
+function openVideoFromDataset(datasetName, modelId) {
+  const filename = datasetName.replace(/\.parquet$/, '.csv');
+  if (!videoFiles.some(f => f.filename === filename)) { alert(`영상 목록에 없는 파일입니다: ${filename}`); return; }
+  openVideo(filename, modelId);
 }
 
 function renderPhaseDeploy() {
