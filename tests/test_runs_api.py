@@ -13,7 +13,7 @@ def _run(run_id, name, status, val_acc, start=1000, end=4000):
             start_time=start, end_time=end,
         ),
         data=SimpleNamespace(
-            params={"epochs": "100", "lr": "0.001", "files": '["a.csv", "b.csv"]'},
+            params={"epochs": "100", "lr": "0.001", "num_files": "2", "files": '["a.csv", "b.cs'},
             metrics={
                 "train_loss": 0.2, "val_loss": 0.3, "val_accuracy": val_acc,
                 "test_accuracy": 0.88, "f1_macro": 0.9, "epoch": 100,

@@ -181,7 +181,7 @@ def _runs(platform: str, errors: dict[str, str]) -> RunsResponse:
             params=RunParams(
                 epochs=int(p["epochs"]) if "epochs" in p else None,
                 lr=float(p["lr"]) if "lr" in p else None,
-                num_files=len(json.loads(p["files"])) if "files" in p else None,
+                num_files=int(p["num_files"]) if "num_files" in p else None,
             ),
             metrics=RunMetrics(
                 train_loss=m.get("train_loss"),
