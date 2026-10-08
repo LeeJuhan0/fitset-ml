@@ -45,22 +45,52 @@ async function openImu(filename) {
   }
 }
 
-// 가로축은 파일 시작부터의 초, 10초마다 회색 세로선
-function drawFileImu() {
-  const canvas = document.getElementById('imuFileCanvas');
+// 캔버스를 화면 배율에 맞추고 ctx, 크기 반환
+function fitCanvas(id) {
+  const canvas = document.getElementById(id);
   const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
   canvas.width = w * dpr; canvas.height = h * dpr;
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
-  if (!fileImu || !fileImu.t.length) return;
-  const total = Math.max(1e-6, fileImu.t[fileImu.t.length - 1]);
+  return { ctx, w, h };
+}
+
+// 가로축은 파일 시작부터의 초, 10초마다 회색 세로선
+function drawSecondGrid(ctx, w, h, total) {
   ctx.strokeStyle = 'rgba(107,114,128,.25)'; ctx.fillStyle = '#9CA3AF'; ctx.font = '10px sans-serif';
   for (let s = 10; s < total; s += 10) {
     const x = s / total * w;
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
     ctx.fillText(`${s}s`, x + 2, h - 3);
   }
-  drawImuWaves(ctx, w, h, fileImu, total);
+}
+
+function drawFileImu() {
+  const imu = fitCanvas('imuFileCanvas'), pca = fitCanvas('imuPcaCanvas');
+  document.getElementById('imuPcaRatio').textContent = '';
+  if (!fileImu || !fileImu.t.length) return;
+  const total = Math.max(1e-6, fileImu.t[fileImu.t.length - 1]);
+  drawSecondGrid(imu.ctx, imu.w, imu.h, total);
+  drawImuWaves(imu.ctx, imu.w, imu.h, fileImu, total);
+  if (!fileImu.pc1) return;
+  drawSecondGrid(pca.ctx, pca.w, pca.h, total);
+  drawPc1(pca.ctx, pca.w, pca.h, fileImu.t, fileImu.pc1, total);
+  document.getElementById('imuPcaRatio').textContent = `· 설명 분산 ${(fileImu.pc1Ratio * 100).toFixed(1)}%`;
+}
+
+// 0 기준선 위아래로 최대 절댓값에 맞춘 한 줄
+function drawPc1(ctx, w, h, t, pc1, total) {
+  const mid = h / 2, amp = Math.max(1e-6, ...pc1.map(Math.abs));
+  ctx.strokeStyle = 'rgba(107,114,128,.4)';
+  ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
+  ctx.strokeStyle = '#2563EB'; ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  pc1.forEach((y, i) => {
+    const x = t[i] / total * w, py = mid - y / amp * (mid - 6);
+    i ? ctx.lineTo(x, py) : ctx.moveTo(x, py);
+  });
+  ctx.stroke();
+  ctx.fillStyle = '#6B7280'; ctx.fillText('acc PC1', 4, 11);
 }
 window.addEventListener('resize', drawFileImu);
 

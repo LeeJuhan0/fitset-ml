@@ -29,8 +29,13 @@ def _read_imu_csv(raw: bytes) -> dict:
     df = pd.read_csv(io.BytesIO(raw))
     ts = df["timestamp"].astype(float)
     scale = utils.timestamp_scale(float(ts.diff().median()))
-    picked = df.iloc[:: max(1, len(df) // IMU_MAX_POINTS)]
-    return {
+    step = max(1, len(df) // IMU_MAX_POINTS)
+    picked = df.iloc[::step]
+    result = {
         "t": ((picked["timestamp"].astype(float) - ts.iloc[0]) / scale).round(3).tolist(),
         "channels": {c: picked[c].astype(float).round(4).tolist() for c in CHANNELS},
     }
+    pca = utils.acc_pc1(df[["ax", "ay", "az"]].to_numpy(dtype=float))
+    if pca is None:
+        return result
+    return {**result, "pc1": pca[0][::step].round(4).tolist(), "pc1_ratio": round(pca[1], 4)}

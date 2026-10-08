@@ -361,6 +361,7 @@ th.sorted .sort-ic { color: var(--blue); }
 .imu-canvas { display: block; width: 100%; height: 140px; margin-top: 8px; border-radius: 8px; background: #FAFAF7; cursor: pointer; }
 .modal.wide { width: 960px; }
 .imu-canvas.file-imu { height: 320px; cursor: default; }
+.imu-canvas.file-pca { height: 140px; cursor: default; margin-top: 14px; }
 .imu-legend { font-size: 11px; color: var(--gray); margin-top: 6px; }
 .playhead { position: absolute; top: 12px; bottom: 0; width: 2px; margin-left: -1px; background: #1F2328; pointer-events: none; display: none; }
 .val-mark { position: absolute; top: 12px; bottom: 0; border-left: 2px dashed #B45309; pointer-events: none; display: none; }

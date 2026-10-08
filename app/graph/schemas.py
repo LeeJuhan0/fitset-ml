@@ -6,3 +6,5 @@ class ImuResponse(CamelModel):
     filename: str
     t: list[float]
     channels: dict[str, list[float]]
+    pc1: list[float] | None = None
+    pc1_ratio: float | None = None

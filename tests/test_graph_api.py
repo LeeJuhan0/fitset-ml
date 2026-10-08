@@ -52,3 +52,25 @@ def test_data_imu_thins_long_file(admin_client, monkeypatch):
 def test_data_imu_404_unknown_file(admin_client, monkeypatch):
     monkeypatch.setattr(graph_mod, "list_files", async_(lambda s, p: []))
     assert admin_client.get("/api/v1/ios/graph/imu?filename=NOPE.csv").status_code == 404
+
+
+def test_data_imu_pc1_follows_dominant_axis(admin_client, monkeypatch):
+    lines = ["timestamp,ax,ay,az,gx,gy,gz,label"]
+    lines += [f"{i / 100:.2f},{(i % 50) / 10},{(i % 50) / 20},0.0,0,0,0,SQUAT" for i in range(1000)]
+    monkeypatch.setattr(graph_mod, "list_files", async_(lambda s, p: [_entry()]))
+    monkeypatch.setattr(graph_mod, "download_csv_bytes", lambda bucket, key: "\n".join(lines).encode())
+
+    data = admin_client.get("/api/v1/ios/graph/imu?filename=SQUAT_ABC_0001.csv").json()["data"]
+    assert len(data["pc1"]) == len(data["t"])
+    assert data["pc1Ratio"] > 0.99
+    assert data["pc1"][49] > data["pc1"][0]
+
+
+def test_data_imu_single_row_skips_pc1(admin_client, monkeypatch):
+    csv_bytes = b"timestamp,ax,ay,az,gx,gy,gz,label\n0.00,1.0,0.5,-1.0,0,0,0,SQUAT"
+    monkeypatch.setattr(graph_mod, "list_files", async_(lambda s, p: [_entry()]))
+    monkeypatch.setattr(graph_mod, "download_csv_bytes", lambda bucket, key: csv_bytes)
+
+    resp = admin_client.get("/api/v1/ios/graph/imu?filename=SQUAT_ABC_0001.csv")
+    assert resp.status_code == 200
+    assert resp.json()["data"]["pc1"] is None
