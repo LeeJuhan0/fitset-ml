@@ -94,6 +94,7 @@ function renderFiles() {
         <th>상태</th>
         <th class="sortable cell-right ${sortKey==='createdAt'?'sorted':''}" onclick="setSort('createdAt')" style="text-align:right">수집일시 ${sortIc('createdAt')}</th>
         <th style="width:52px;text-align:center">통계</th>
+        <th style="width:52px;text-align:center">그래프</th>
       </tr></thead>
       <tbody>
         ${slice.map((f, i) => `
@@ -108,6 +109,11 @@ function renderFiles() {
           <td style="text-align:center">
             <button class="stats-btn" title="센서 통계 보기" onclick="event.stopPropagation();openStats('${f.filename}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            </button>
+          </td>
+          <td style="text-align:center">
+            <button class="stats-btn" title="6축 그래프 보기" onclick="event.stopPropagation();openImu('${f.filename}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,12 6,6 10,16 14,8 18,14 22,10"/></svg>
             </button>
           </td>
         </tr>`).join('')}

@@ -10,6 +10,7 @@ from app.core.security import register_static_basic_guard
 from app.data.router import admin_router as data_router
 from app.deployment.router import admin_router as deploy_router, internal_router
 from app.exercises.router import router as exercises_router
+from app.graph.router import router as graph_router
 from app.mlflow_proxy import router as mlflow_proxy_router
 from app.labeling.router import router as labeling_router
 from app.phase.router import router as phase_router
@@ -18,6 +19,7 @@ from app.training.router import router as train_router
 OPENAPI_TAGS = [
     {"name": "exercises", "description": "운동 종목 마스터, 모델 출력 인덱스와 slug 매핑, class-mapping 시드"},
     {"name": "data", "description": "학습 데이터셋 목록, 통계, 어드민 직행 업로드, 유저 업로드 승격"},
+    {"name": "graph", "description": "학습 데이터 6축 파형"},
     {"name": "labeling", "description": "수집앱 IMU+영상 업로드, 구간 라벨링, 승격"},
     {"name": "phase", "description": "종목별 렙카운팅 모델 학습, 배포"},
     {"name": "training", "description": "분류 모델 학습 시작, 진행 상태, MLflow 이력"},
@@ -45,6 +47,7 @@ def health(request: Request):
 
 app.include_router(exercises_router, prefix="/api/v1", responses=ERROR_DOC)
 app.include_router(data_router, prefix="/api/v1", responses=ERROR_DOC)
+app.include_router(graph_router, prefix="/api/v1", responses=ERROR_DOC)
 app.include_router(labeling_router, prefix="/api/v1", responses=ERROR_DOC)
 app.include_router(phase_router, prefix="/api/v1", responses=ERROR_DOC)
 app.include_router(train_router, prefix="/api/v1", responses=ERROR_DOC)

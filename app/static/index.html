@@ -271,6 +271,19 @@
   </div>
 </div>
 
+<!-- 파일 6축 그래프 모달 -->
+<div class="modal-backdrop" id="imuModal" onclick="if(event.target===this)closeImu()">
+  <div class="modal wide">
+    <div class="modal-head">
+      <h3 id="imuTitle"></h3>
+      <button class="modal-close" onclick="closeImu()">✕</button>
+    </div>
+    <div class="modal-sub" id="imuSub"></div>
+    <canvas class="imu-canvas file-imu" id="imuFileCanvas"></canvas>
+    <div class="imu-legend"><span style="color:#EF4444">x</span> <span style="color:#F59E0B">y</span> <span style="color:#8B5CF6">z</span> · 위 acc, 아래 gyro, 채널별 평균을 뺀 파형</div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="videoModal" onclick="if(event.target===this)closeVideo()">
   <div class="modal video">
     <div class="modal-head">
@@ -317,6 +330,7 @@
 </div>
 
 <script src="js/core.js"></script>
+<script src="js/graph.js"></script>
 <script src="js/data.js"></script>
 <script src="js/training.js"></script>
 <script src="js/deployment.js"></script>

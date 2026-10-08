@@ -8,9 +8,9 @@ import tempfile
 from botocore.exceptions import BotoCoreError, ClientError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.graph.schemas import ImuResponse
 from app.labeling.schemas import (
     DeleteFileResponse,
-    ImuResponse,
     LabelResponse,
     ListFilesResponse,
     PoseResponse,

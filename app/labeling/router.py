@@ -8,11 +8,11 @@ from app.core.security import check_basic_auth
 from app.deps import DbSessionDep, get_trace_id, validate_platform
 from app.labeling import service
 from app.labeling.models import CollectFileRead
+from app.graph.schemas import ImuResponse
 from app.labeling.schemas import (
     ChangeClassRequest,
     DeleteFileResponse,
     EditPhasesRequest,
-    ImuResponse,
     LabelResponse,
     LabelRequest,
     ListFilesResponse,

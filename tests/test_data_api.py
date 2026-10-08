@@ -58,6 +58,18 @@ def test_data_stats_trims_edges(admin_client, monkeypatch):
     assert {c["channel"] for c in data["channels"]} == {"ax", "ay", "az", "gx", "gy", "gz"}
 
 
+def test_data_stats_trims_seconds_timestamps(admin_client, monkeypatch):
+    lines = ["timestamp,ax,ay,az,gx,gy,gz,label"]
+    lines += [f"{1782545010 + i / 100:.3f},{99.0 if i < 300 else 1.0},0.5,-1.0,0.1,-0.1,0.0,SQUAT" for i in range(1000)]
+    monkeypatch.setattr(data_mod, "list_files", async_(lambda s, p: [_entry("SQUAT_ABC_0003.csv")]))
+    monkeypatch.setattr(data_mod, "download_csv_bytes", lambda bucket, key: "\n".join(lines).encode())
+
+    data = admin_client.get("/api/v1/ios/data/stats?filename=SQUAT_ABC_0003.csv").json()["data"]
+    assert data["trimApplied"] is True
+    assert 9.9 <= data["durationSeconds"] <= 10.0
+    assert next(c for c in data["channels"] if c["channel"] == "ax")["max"] == 1.0
+
+
 def test_data_stats_short_file_skips_trim(admin_client, monkeypatch):
     monkeypatch.setattr(data_mod, "list_files", async_(lambda s, p: [_entry("SQUAT_ABC_0002.csv")]))
     monkeypatch.setattr(

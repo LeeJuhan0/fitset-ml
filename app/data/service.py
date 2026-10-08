@@ -11,6 +11,7 @@ from app.data.schemas import (
     UploadConfirmResponse,
 )
 from app.data import utils
+from app.graph.utils import timestamp_scale
 from app.exercises.repository import is_class_known
 from app.data.exceptions import DataFileNotFoundError, InvalidDeviceIdError, ReservationNotFoundError, UnsupportedClassError
 
@@ -49,7 +50,8 @@ def _compute_stats(raw: bytes, filename: str, class_name: str) -> FileStatsRespo
     import pandas as pd
 
     df = pd.read_csv(io.BytesIO(raw))
-    t = (df["timestamp"] - df["timestamp"].iloc[0]) / 1e9
+    ts = df["timestamp"].astype(float)
+    t = (ts - ts.iloc[0]) / timestamp_scale(float(ts.diff().median()))
     duration = float(t.iloc[-1])
     trimmed = df[(t >= STATS_TRIM_SECONDS) & (t <= duration - STATS_TRIM_SECONDS)]
     trim_applied = len(trimmed) > 0

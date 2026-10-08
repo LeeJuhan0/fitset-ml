@@ -9,7 +9,6 @@ let editFilename = null;
 let imuData = null;    // {t: 영상 시작 기준 초, channels}
 let predData = null;   // 모델 예측, 프레임별
 const FLICKER_SECONDS = 0.3;
-const IMU_COLORS = ['#EF4444', '#F59E0B', '#8B5CF6'];
 
 async function openVideo(filename, modelId) {
   const f = videoFiles.find(x => x.filename === filename);
@@ -295,26 +294,7 @@ function drawImu() {
     const x = i / frames.length * w;
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
   }
-  [['ax', 'ay', 'az'], ['gx', 'gy', 'gz']].forEach((group, gi) => {
-    const top = gi * h / 2, half = h / 4;
-    const series = group.map(k => {
-      const v = imuData.channels[k];
-      const mean = v.reduce((a, b) => a + b, 0) / v.length;
-      return v.map(y => y - mean);
-    });
-    const amp = Math.max(1e-6, ...series.map(s => s.reduce((a, b) => Math.max(a, Math.abs(b)), 0)));
-    series.forEach((s, ci) => {
-      ctx.strokeStyle = IMU_COLORS[ci]; ctx.lineWidth = 1;
-      ctx.beginPath();
-      s.forEach((y, i) => {
-        const x = imuData.t[i] / total * w, py = top + half - y / amp * (half - 4);
-        i ? ctx.lineTo(x, py) : ctx.moveTo(x, py);
-      });
-      ctx.stroke();
-    });
-    ctx.fillStyle = '#6B7280'; ctx.font = '10px sans-serif';
-    ctx.fillText(gi ? 'gyro' : 'acc', 4, top + 11);
-  });
+  drawImuWaves(ctx, w, h, imuData, total);
 }
 window.addEventListener('resize', drawImu);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeVideo(); });
